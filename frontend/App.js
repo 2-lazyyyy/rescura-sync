@@ -34,7 +34,7 @@ function isWithinASEAN(lat, lon) {
     return (lat >= -11.0 && lat <= 28.5 && lon >= 90.0 && lon <= 141.0);
 }
 
-const API_HOSTS = ['http://127.0.0.1:8000', 'http://localhost:8000'];
+const API_HOSTS = ['https://rescura-sync.onrender.com', 'http://127.0.0.1:8000', 'http://localhost:8000'];
 
 /**
  * Fast, resilient API fetch helper with AbortController timeout (max 3.5s)
@@ -686,8 +686,12 @@ function initSSEStream() {
     if (eventSourceClient) return;
 
     try {
-        let streamUrl = 'http://127.0.0.1:8000/api/stream-disasters';
-        eventSourceClient = new EventSource(streamUrl);
+        let streamUrl = 'https://rescura-sync.onrender.com/api/stream-disasters';
+        try {
+            eventSourceClient = new EventSource(streamUrl);
+        } catch (e) {
+            eventSourceClient = new EventSource('http://127.0.0.1:8000/api/stream-disasters');
+        }
 
         eventSourceClient.onmessage = (e) => {
             try {
