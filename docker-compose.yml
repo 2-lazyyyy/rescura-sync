@@ -1,29 +1,31 @@
-version: '3.9'
+version: '3.8'
 
 services:
   db:
-    image: postgres:16-alpine
+    image: postgres:15-alpine
+    container_name: rescura_db
     environment:
       POSTGRES_USER: rescura
       POSTGRES_PASSWORD: rescura123
       POSTGRES_DB: rescura_db
-    volumes:
-      - db_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
 
-  backend:
+  api:
     build:
-      context: .
-      dockerfile: backend/Dockerfile
-    depends_on:
-      - db
-    environment:
-      DATABASE_URL: postgres://rescura:rescura123@db:5432/rescura_db
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: rescura_api
     ports:
       - "8000:8000"
-    volumes:
-      - ./backend/app:/app/app
+    environment:
+      DATABASE_URL: postgresql+asyncpg://rescura:rescura123@db:5432/rescura_db
+    depends_on:
+      - db
+    restart: always
 
 volumes:
-  db_data:
+  postgres_data:
