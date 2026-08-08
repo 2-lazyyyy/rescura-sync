@@ -1,5 +1,9 @@
 from typing import Dict, Any
-import osmnx as ox
+try:
+    import osmnx as ox
+except ImportError:
+    ox = None
+
 from services.depot_service import find_nearest_depot
 
 
@@ -17,30 +21,33 @@ async def get_evacuation_routes(lat: float, lon: float, radius_km: int = 6) -> D
     nodes_count = 0
     edges_count = 0
 
-    try:
-        # Bounding box covering both depot and disaster site with padding
-        north = max(lat, depot_lat) + 0.03
-        south = min(lat, depot_lat) - 0.03
-        east = max(lon, depot_lon) + 0.03
-        west = min(lon, depot_lon) - 0.03
+    if ox is not None:
+        try:
+            # Bounding box covering both depot and disaster site with padding
+            north = max(lat, depot_lat) + 0.03
+            south = min(lat, depot_lat) - 0.03
+            east = max(lon, depot_lon) + 0.03
+            west = min(lon, depot_lon) - 0.03
 
-        # Download street network graph for the bounding box
-        graph = ox.graph_from_bbox(bbox=(north, south, east, west), network_type='drive')
+            # Download street network graph for the bounding box
+            graph = ox.graph_from_bbox(bbox=(north, south, east, west), network_type='drive')
 
-        nodes_count = len(graph.nodes)
-        edges_count = len(graph.edges)
+            nodes_count = len(graph.nodes)
+            edges_count = len(graph.edges)
 
-        start_node = ox.distance.nearest_nodes(graph, X=depot_lon, Y=depot_lat)
-        end_node = ox.distance.nearest_nodes(graph, X=lon, Y=lat)
+            start_node = ox.distance.nearest_nodes(graph, X=depot_lon, Y=depot_lat)
+            end_node = ox.distance.nearest_nodes(graph, X=lon, Y=lat)
 
-        route_nodes = ox.shortest_path(graph, start_node, end_node, weight='length')
+            route_nodes = ox.shortest_path(graph, start_node, end_node, weight='length')
 
-        if route_nodes:
-            road_points = [[graph.nodes[n]['y'], graph.nodes[n]['x']] for n in route_nodes]
-            # Ensure route starts at exact depot coordinates and ends at exact disaster coordinates
-            optimal_route_coords = [[depot_lat, depot_lon]] + road_points + [[lat, lon]]
-    except Exception as e:
-        print(f"OSMnx graph routing notice: {e}. Generating direct supply route from depot.")
+            if route_nodes:
+                road_points = [[graph.nodes[n]['y'], graph.nodes[n]['x']] for n in route_nodes]
+                # Ensure route starts at exact depot coordinates and ends at exact disaster coordinates
+                optimal_route_coords = [[depot_lat, depot_lon]] + road_points + [[lat, lon]]
+        except Exception as e:
+            print(f"OSMnx graph routing notice: {e}. Generating direct supply route from depot.")
+            optimal_route_coords = [[depot_lat, depot_lon], [lat, lon]]
+    else:
         optimal_route_coords = [[depot_lat, depot_lon], [lat, lon]]
 
     if not optimal_route_coords:
