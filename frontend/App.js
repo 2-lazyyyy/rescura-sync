@@ -157,6 +157,17 @@ function parseSOSCoords(alert, index = 0) {
     return { lat, lon };
 }
 
+let searchQuery = '';
+
+/**
+ * Filter alerts by user search query in sidebar
+ */
+function filterAlerts() {
+    const input = document.getElementById('search-input');
+    searchQuery = input ? input.value.toLowerCase().trim() : '';
+    renderSidebarCards();
+}
+
 /**
  * Render cards in the sidebar based on active tab with click-to-focus interactivity
  */
@@ -165,12 +176,19 @@ function renderSidebarCards() {
     container.innerHTML = '';
 
     if (currentTab === 'gdacs') {
-        if (!gdacsAlertsData.length) {
-            container.innerHTML = '<div style="color: #94a3b8; text-align: center; padding: 20px;">No GDACS alerts loaded.</div>';
+        const filtered = gdacsAlertsData.filter(alert => {
+            if (!searchQuery) return true;
+            const t = (alert.title || '').toLowerCase();
+            const d = (alert.disaster_type || '').toLowerCase();
+            return t.includes(searchQuery) || d.includes(searchQuery);
+        });
+
+        if (!filtered.length) {
+            container.innerHTML = '<div style="color: #94a3b8; text-align: center; padding: 20px; font-size: 13px;">No matching GDACS disasters found.</div>';
             return;
         }
 
-        gdacsAlertsData.forEach(alert => {
+        filtered.forEach(alert => {
             const lat = alert.latitude || alert.lat;
             const lon = alert.longitude || alert.lon;
             const card = document.createElement('div');
@@ -182,37 +200,50 @@ function renderSidebarCards() {
             card.innerHTML = `
                 <div class="card-header">
                     <span class="card-type">${alert.disaster_type || 'EMERGENCY'}</span>
-                    <span class="card-severity">Severity: ${alert.severity}/10</span>
+                    <span class="card-severity">SEV ${alert.severity}/10</span>
                 </div>
                 <div class="card-title">${alert.title}</div>
-                <div class="card-meta">Coords: ${lat.toFixed(4)}, ${lon.toFixed(4)}</div>
+                <div class="card-meta">
+                    <span class="meta-pill">📍 ${lat.toFixed(3)}, ${lon.toFixed(3)}</span>
+                    <span class="meta-pill" style="color: #38bdf8;">ASEAN REGION</span>
+                </div>
             `;
             container.appendChild(card);
         });
     } else {
-        if (!sosAlertsData.length) {
-            container.innerHTML = '<div style="color: #94a3b8; text-align: center; padding: 20px;">No Mobile SOS reports recorded.</div>';
+        const filtered = sosAlertsData.filter(alert => {
+            if (!searchQuery) return true;
+            const loc = (alert.location || '').toLowerCase();
+            const need = (alert.urgent_need || alert.urgent_need_category || '').toLowerCase();
+            return loc.includes(searchQuery) || need.includes(searchQuery);
+        });
+
+        if (!filtered.length) {
+            container.innerHTML = '<div style="color: #94a3b8; text-align: center; padding: 20px; font-size: 13px;">No matching Mobile SOS reports recorded.</div>';
             return;
         }
 
-        sosAlertsData.forEach((alert, index) => {
+        filtered.forEach((alert, index) => {
             const { lat, lon } = parseSOSCoords(alert, index);
 
             const urgentNeed = alert.urgent_need || alert.urgent_need_category || 'Water';
             const affectedCount = alert.affected_people || alert.affected_count || 10;
             const status = alert.status || 'pending';
-            const statusBadgeColor = status === 'resolved' ? '#22c55e' : (status === 'dispatched' ? '#f97316' : '#ef4444');
+            const statusBadgeColor = status === 'resolved' ? '#10b981' : (status === 'dispatched' ? '#fb923c' : '#f87171');
 
             const card = document.createElement('div');
             card.className = 'alert-card';
             card.onclick = () => focusMap(lat, lon);
             card.innerHTML = `
                 <div class="card-header">
-                    <span class="card-type" style="background: rgba(239, 68, 68, 0.3); color: #fca5a5;">SOS ALERT</span>
-                    <span class="card-severity" style="color: ${statusBadgeColor}; text-transform: uppercase;">${status}</span>
+                    <span class="card-type" style="color: #f87171;">🚨 SOS TELEMETRY</span>
+                    <span class="card-severity" style="color: ${statusBadgeColor}; border-color: ${statusBadgeColor}55;">${status.toUpperCase()}</span>
                 </div>
-                <div class="card-title">${alert.location || 'Bago Civilian Sector'}</div>
-                <div class="card-meta">Need: <b>${urgentNeed}</b> &bull; Affected: <b>${affectedCount}</b> people</div>
+                <div class="card-title">${alert.location || 'Civilian Sector Emergency'}</div>
+                <div class="card-meta">
+                    <span class="meta-pill">Need: <b>${urgentNeed}</b></span>
+                    <span class="meta-pill">Affected: <b>${affectedCount}</b></span>
+                </div>
             `;
             container.appendChild(card);
         });
