@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About Us - Rescura Sync Command Center</title>
+    <!-- Google Fonts: Inter & Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Global CSS Stylesheet -->
+    <link rel="stylesheet" href="style.css?v=20260810">
+</head>
+<body>
+    <!-- Fixed Global Navigation Bar -->
+    <nav class="global-navbar">
+        <a href="index.html" class="nav-brand">
+            <span class="nav-brand-icon">🛡️</span>
+            <span>RESCURA SYNC</span>
+        </a>
+        <div class="nav-links">
+            <a href="index.html" class="nav-link">🗺️ Live Map</a>
+            <a href="events.html" class="nav-link">⚠️ Disaster Events</a>
+            <a href="knowledge.html" class="nav-link">📖 Knowledge Base</a>
+            <a href="about.html" class="nav-link active">ℹ️ About Us</a>
+        </div>
+        <div class="nav-right-toolbar">
+            <button class="btn-nav-purple" id="btn-pdf-download" onclick="downloadActionPlanPDF(1)">
+                <span id="pdf-icon">📄</span> Action Plan PDF
+            </button>
+            <button class="btn-nav-blue" id="btn-sync-ai" onclick="syncData()">
+                <span id="sync-icon">⚡</span> Sync AI
+            </button>
+            <button class="btn-nav-teal" id="btn-refresh-logistics" onclick="refreshLogistics()">
+                <span id="refresh-icon">🔄</span> Refresh
+            </button>
+            <div class="nav-status-badge">
+                <span>LIVE TELEMETRY</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Page Content Container -->
+    <div class="page-wrapper">
+        <div class="page-header">
+            <div class="page-title-group">
+                <h1>ℹ️ About Rescura Sync</h1>
+                <p>Next-generation Situation Awareness Center (SAC) providing real-time disaster detection, spatial demographic calculations, and AI-driven relief logistics.</p>
+            </div>
+        </div>
+
+        <!-- Grid of About Us Sections -->
+        <div class="content-grid">
+            <!-- Section 1: Mission & Vision -->
+            <div class="glass-card" style="grid-column: span 2;">
+                <div class="glass-card-title">
+                    <span class="badge-tag blue">Platform Mission</span>
+                    <span>Automating Emergency Logistics in Crisis Zones</span>
+                </div>
+                <div class="glass-card-body">
+                    <p><b>Rescura Sync</b> is designed to empower humanitarian agencies, disaster response units, and command personnel with immediate actionable telemetry during natural disasters. By bridging live global sensor feeds with spatial demographic engines and machine learning, Rescura Sync eliminates operational delays when allocating life-saving supplies.</p>
+                    <p style="margin-top: 10px;">Whether responding to sudden earthquakes, coastal tropical cyclones, flash floods, or regional macro-droughts, the platform computes precise water and food requirements within seconds and identifies optimal evacuation convoy routes from nearby supply hubs.</p>
+                </div>
+            </div>
+
+            <!-- Section 2: Technical Architecture -->
+            <div class="glass-card">
+                <div class="glass-card-title">
+                    <span class="badge-tag purple">Architecture</span>
+                    <span>Full-Stack Engineering Architecture</span>
+                </div>
+                <div class="glass-card-body">
+                    <ul>
+                        <li><b>Backend Core:</b> FastAPI (Async Python 3.11+) with Uvicorn server and Server-Sent Events (SSE) streaming.</li>
+                        <li><b>Database & ORM:</b> SQLAlchemy Async Session handling SQLite & PostgreSQL data models.</li>
+                        <li><b>AI & Analytics:</b> Pandas & scikit-learn ensemble RandomForestRegressor for relief prediction.</li>
+                        <li><b>GIS Routing Engine:</b> OSMnx, NetworkX, and Geopy for road graph extraction and Dijkstra routing.</li>
+                        <li><b>Frontend UI:</b> HTML5, Enterprise Dark Mode CSS, Leaflet.js with CartoDB Dark & Esri Satellite layers.</li>
+                        <li><b>Realtime SOS:</b> Supabase Realtime WebSocket engine sync with mobile civilian apps.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Section 3: Ingested Data Sources -->
+            <div class="glass-card">
+                <div class="glass-card-title">
+                    <span class="badge-tag amber">Integrations</span>
+                    <span>Authorized Live & Citable Data Sources</span>
+                </div>
+                <div class="glass-card-body">
+                    <p>Rescura Sync aggregates real-time data from internationally recognized disaster response and seismic institutions:</p>
+                    <ul>
+                        <li><b>GDACS (UN / European Commission):</b> Real-time RSS XML and GeoJSON feeds for global tropical cyclones, floods, droughts, forest fires, and earthquakes.</li>
+                        <li><b>USGS (U.S. Geological Survey):</b> Citable real-world seismic data API (min. mag 4.5+) for validation and historical model training.</li>
+                        <li><b>OpenStreetMap & Esri World Imagery:</b> Open-access vector GIS cartography and high-resolution satellite imagery.</li>
+                        <li><b>Civilian Mobile Telemetry:</b> Encrypted SOS distress signals originating from the Rescura Sync React Native Mobile Application.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Section 4: System Capabilities -->
+            <div class="glass-card" style="grid-column: span 2;">
+                <div class="glass-card-title">
+                    <span class="badge-tag emerald">Capabilities</span>
+                    <span>Core Platform Operational Features</span>
+                </div>
+                <div class="glass-card-body" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div>
+                        <h4 style="color: #f8fafc; font-size: 14px; margin-bottom: 6px;">🗺️ Interactive GIS Command Map</h4>
+                        <p style="font-size: 13px;">Full-screen map supporting CartoDB Dark Canvas and Esri Satellite Imagery with dynamic continent filtering, depot markers, and animated route overlays.</p>
+                    </div>
+                    <div>
+                        <h4 style="color: #f8fafc; font-size: 14px; margin-bottom: 6px;">🤖 Multi-Target AI Relief Allocator</h4>
+                        <p style="font-size: 13px;">RandomForest machine learning predictions calculating water volume (liters), food packs, and operation completion time with Sphere Project standard fallbacks.</p>
+                    </div>
+                    <div>
+                        <h4 style="color: #f8fafc; font-size: 14px; margin-bottom: 6px;">🚨 Civilian SOS Distress Monitoring</h4>
+                        <p style="font-size: 13px;">Real-time distress signal tracking from mobile civilian apps with immediate depot dispatch assignment and priority routing.</p>
+                    </div>
+                    <div>
+                        <h4 style="color: #f8fafc; font-size: 14px; margin-bottom: 6px;">📄 One-Click Action Plan Export</h4>
+                        <p style="font-size: 13px;">Automated executive PDF action plan report generation powered by fpdf2, including incident details, depot allocations, and emergency contact lists.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_HOST = window.location.origin.replace(':5500', ':8000');
+        function downloadActionPlanPDF(evtId = 1) {
+            window.open(`${API_HOST}/api/export-report/${evtId}`, '_blank');
+        }
+        function syncData() {
+            window.location.href = 'index.html';
+        }
+        function refreshLogistics() {
+            window.location.reload();
+        }
+    </script>
+</body>
+</html>

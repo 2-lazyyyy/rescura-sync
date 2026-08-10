@@ -1,16 +1,94 @@
 import xml.etree.ElementTree as ET
 from typing import List, Dict, Any
 import httpx
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 
 GDACS_RSS_URL = "https://www.gdacs.org/xml/rss.xml"
 GDACS_GEOJSON_URL = "https://www.gdacs.org/xml/gdacs.geojson"
 
 
+def parse_gdacs_pubdate(pub_date_str: str) -> str:
+    """
+    Parses various GDACS date string formats (RSS pubDate, GeoJSON fromdate, ISO strings)
+    into a standardized string (YYYY-MM-DD HH:MM:SS UTC).
+    """
+    if not pub_date_str:
+        return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    try:
+        dt = parsedate_to_datetime(pub_date_str)
+        if dt:
+            return dt.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    except Exception:
+        pass
+
+    try:
+        clean_str = pub_date_str.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(clean_str)
+        return dt.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    except Exception:
+        pass
+
+    return pub_date_str
+
+
+def format_gdacs_title(raw_title: str, country_str: str = "") -> str:
+    """
+    Cleans up GDACS disaster titles:
+    - Eliminates redundant repeating country strings in parentheses.
+    - Summarizes long multi-nation country lists (>=3 countries) into a clean, concise title.
+    """
+    if not raw_title:
+        return "Active Disaster Alert"
+
+    clean = raw_title.strip()
+
+    # Remove redundant trailing parenthetical country lists if present in raw GDACS title
+    if "(" in clean and ")" in clean:
+        prefix = clean.split("(")[0].strip()
+        if "," in clean and len(clean) > 40:
+            clean = prefix
+
+    if "." in clean:
+        clean = clean.split(".")[0].strip()
+
+    # If title lists 3 or more countries, format as a concise regional summary
+    if "," in clean and clean.count(",") >= 3:
+        if " in " in clean:
+            parts = clean.split(" in ")
+            event_name = parts[0].strip()
+            first_countries = [c.strip() for c in parts[1].split(",") if c.strip()][:3]
+            clean = f"{event_name} in {', '.join(first_countries)} (+more regions)"
+        else:
+            first_countries = [c.strip() for c in clean.split(",") if c.strip()][:3]
+            clean = f"{', '.join(first_countries)} (+more regions)"
+
+    # Avoid appending repeating country lists in parentheses if country is already mentioned
+    if country_str and "," not in country_str and len(country_str) < 40:
+        if country_str.lower() not in clean.lower():
+            clean = f"{clean} ({country_str.strip()})"
+
+    return clean
+
+
+import time
+
+_gdacs_cache: List[Dict[str, Any]] = []
+_last_fetch_time: float = 0.0
+
+
 async def fetch_active_disasters() -> List[Dict[str, Any]]:
     """
     Fetches active global & regional disaster alerts from GDACS.
-    Prioritizes Myanmar & Southeast Asian events, returning up to 20 active alerts.
+    Prioritizes Myanmar & Southeast Asian events, returning up to 50 active alerts.
+    Caches results in memory for 5 minutes for instant response times.
     """
+    global _gdacs_cache, _last_fetch_time
+    now = time.time()
+
+    if _gdacs_cache and (now - _last_fetch_time < 300):
+        return _gdacs_cache
+
     disasters: List[Dict[str, Any]] = []
 
     # 1. Primary: Try GDACS RSS Feed (fast, lightweight ~950KB)
@@ -43,9 +121,9 @@ async def fetch_active_disasters() -> List[Dict[str, Any]]:
                     except ValueError:
                         severity = 7.0
 
-                    clean_title = title_elem.split('.')[0] if '.' in title_elem else title_elem
-                    if country and country.lower() not in clean_title.lower():
-                        clean_title = f"{clean_title} ({country})"
+                    clean_title = format_gdacs_title(title_elem, country)
+                    pub_date = item.findtext("pubDate") or item.findtext("pubdate") or ""
+                    formatted_date = parse_gdacs_pubdate(pub_date)
 
                     disasters.append({
                         "title": clean_title,
@@ -53,7 +131,8 @@ async def fetch_active_disasters() -> List[Dict[str, Any]]:
                         "lat": float(lat),
                         "lon": float(lon),
                         "severity": severity,
-                        "country": country
+                        "country": country,
+                        "created_at": formatted_date
                     })
     except Exception as e:
         print(f"Warning: Failed to fetch live GDACS RSS feed ({str(e)}). Trying GeoJSON fallback.")
@@ -79,7 +158,13 @@ async def fetch_active_disasters() -> List[Dict[str, Any]]:
                         if lat is None or lon is None:
                             continue
 
-                        title = props.get("name") or props.get("eventname") or props.get("title") or "Disaster Alert"
+                        raw_title = props.get("name") or props.get("eventname") or props.get("title") or "Disaster Alert"
+                        country = props.get("country", "")
+                        clean_title = format_gdacs_title(raw_title, country)
+                        
+                        from_date = props.get("fromdate") or props.get("pubdate") or props.get("datemodified") or ""
+                        formatted_date = parse_gdacs_pubdate(from_date)
+
                         event_type = props.get("eventtype") or props.get("type") or "General Emergency"
                         alert_score = props.get("alertscore") or 5.0
                         try:
@@ -89,12 +174,13 @@ async def fetch_active_disasters() -> List[Dict[str, Any]]:
                             severity = 7.0
 
                         disasters.append({
-                            "title": title,
+                            "title": clean_title,
                             "disaster_type": event_type,
                             "lat": float(lat),
                             "lon": float(lon),
                             "severity": severity,
-                            "country": props.get("country", "")
+                            "country": country,
+                            "created_at": formatted_date
                         })
         except Exception as e:
             print(f"Warning: GDACS GeoJSON fetch failed: {e}")
@@ -113,14 +199,20 @@ async def fetch_active_disasters() -> List[Dict[str, Any]]:
     sorted_results = myanmar_events + se_asia_events + other_events
 
     if sorted_results:
-        return sorted_results[:20]
+        res = sorted_results[:50]
+        _gdacs_cache = res
+        _last_fetch_time = now
+        return res
 
     # Dynamic regional fallback events if offline or GDACS feeds unreachable
-    return [
-        {"title": "Bago River Flood Level Warning", "disaster_type": "Flood", "lat": 17.3333, "lon": 96.4833, "severity": 7.8, "country": "Myanmar"},
-        {"title": "Cyclone Mocha Coastal Recovery Alert", "disaster_type": "Tropical Cyclone", "lat": 20.1500, "lon": 92.9000, "severity": 8.5, "country": "Myanmar"},
-        {"title": "Shan State Seismic Activity Monitor", "disaster_type": "Earthquake", "lat": 20.7800, "lon": 97.0300, "severity": 6.8, "country": "Myanmar"},
-        {"title": "Ayeyarwady Delta Surge Warning", "disaster_type": "Flood", "lat": 16.0300, "lon": 95.2300, "severity": 7.2, "country": "Myanmar"},
-        {"title": "Mandalay Basin Drought Monitor", "disaster_type": "Drought", "lat": 21.9588, "lon": 96.0891, "severity": 6.2, "country": "Myanmar"},
-        {"title": "Kachin Landslide Alert Zone", "disaster_type": "Landslide", "lat": 25.3833, "lon": 97.4000, "severity": 7.9, "country": "Myanmar"}
+    fallback_res = [
+        {"title": "Bago River Flood Level Warning", "disaster_type": "Flood", "lat": 17.3333, "lon": 96.4833, "severity": 7.8, "country": "Myanmar", "created_at": "2026-08-09 17:15:00 UTC"},
+        {"title": "Cyclone Mocha Coastal Recovery Alert", "disaster_type": "Tropical Cyclone", "lat": 20.1500, "lon": 92.9000, "severity": 8.5, "country": "Myanmar", "created_at": "2026-08-09 14:30:00 UTC"},
+        {"title": "Shan State Seismic Activity Monitor", "disaster_type": "Earthquake", "lat": 20.7800, "lon": 97.0300, "severity": 6.8, "country": "Myanmar", "created_at": "2026-08-09 11:20:00 UTC"},
+        {"title": "Ayeyarwady Delta Surge Warning", "disaster_type": "Flood", "lat": 16.0300, "lon": 95.2300, "severity": 7.2, "country": "Myanmar", "created_at": "2026-08-09 09:45:00 UTC"},
+        {"title": "Mandalay Basin Drought Monitor", "disaster_type": "Drought", "lat": 21.9588, "lon": 96.0891, "severity": 6.2, "country": "Myanmar", "created_at": "2026-08-09 08:15:00 UTC"},
+        {"title": "Kachin Landslide Alert Zone", "disaster_type": "Landslide", "lat": 25.3833, "lon": 97.4000, "severity": 7.9, "country": "Myanmar", "created_at": "2026-08-09 06:30:00 UTC"}
     ]
+    _gdacs_cache = fallback_res
+    _last_fetch_time = now
+    return fallback_res

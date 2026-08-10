@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Disaster Events Log - Rescura Sync Command Center</title>
+    <!-- Google Fonts: Inter & Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Global CSS Stylesheet -->
+    <link rel="stylesheet" href="style.css?v=20260810">
+</head>
+<body>
+    <!-- Fixed Global Navigation Bar -->
+    <nav class="global-navbar">
+        <a href="index.html" class="nav-brand">
+            <span class="nav-brand-icon">🛡️</span>
+            <span>RESCURA SYNC</span>
+        </a>
+        <div class="nav-links">
+            <a href="index.html" class="nav-link">🗺️ Live Map</a>
+            <a href="events.html" class="nav-link active">⚠️ Disaster Events</a>
+            <a href="knowledge.html" class="nav-link">📖 Knowledge Base</a>
+            <a href="about.html" class="nav-link">ℹ️ About Us</a>
+        </div>
+        <div class="nav-right-toolbar">
+            <button class="btn-nav-purple" id="btn-pdf-download" onclick="downloadActionPlanPDF(1)">
+                <span id="pdf-icon">📄</span> Action Plan PDF
+            </button>
+            <button class="btn-nav-blue" id="btn-sync-ai" onclick="syncData()">
+                <span id="sync-icon">⚡</span> Sync AI
+            </button>
+            <button class="btn-nav-teal" id="btn-refresh-logistics" onclick="refreshLogistics()">
+                <span id="refresh-icon">🔄</span> Refresh
+            </button>
+            <div class="nav-status-badge">
+                <span>LIVE TELEMETRY</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Page Content Container -->
+    <div class="page-wrapper">
+        <div class="page-header">
+            <div class="page-title-group">
+                <h1>⚠️ Active Disaster Events Log</h1>
+                <p>Real-time audit trail of global GDACS emergency alerts, spatial impact analyses, and AI-driven humanitarian supply allocations.</p>
+            </div>
+        </div>
+
+        <!-- Summary Metric Cards -->
+        <div class="page-stats-grid">
+            <div class="stat-widget" style="padding: 16px;">
+                <span class="stat-label">Total Active Events</span>
+                <span class="stat-value" id="evt-stat-total">0</span>
+            </div>
+            <div class="stat-widget" style="padding: 16px;">
+                <span class="stat-label">Severe Disasters (SEV 7+)</span>
+                <span class="stat-value stat-pending" id="evt-stat-severe">0</span>
+            </div>
+            <div class="stat-widget" style="padding: 16px;">
+                <span class="stat-label">Total Water Required</span>
+                <span class="stat-value stat-water" id="evt-stat-water">0 L</span>
+            </div>
+            <div class="stat-widget" style="padding: 16px;">
+                <span class="stat-label">Total Food Required</span>
+                <span class="stat-value stat-food" id="evt-stat-food">0 Packs</span>
+            </div>
+        </div>
+
+        <!-- Table Filters & Search Bar -->
+        <div class="table-controls">
+            <div class="continent-filter-bar" style="border: none; padding: 0;">
+                <button class="continent-chip active" id="chip-all" onclick="filterEventsByContinent('All')">All Continents <span class="chip-count" id="cnt-all">0</span></button>
+                <button class="continent-chip" id="chip-asia" onclick="filterEventsByContinent('Asia')">🌏 Asia <span class="chip-count" id="cnt-asia">0</span></button>
+                <button class="continent-chip" id="chip-europe" onclick="filterEventsByContinent('Europe')">🌍 Europe <span class="chip-count" id="cnt-europe">0</span></button>
+                <button class="continent-chip" id="chip-americas" onclick="filterEventsByContinent('Americas')">🌎 Americas <span class="chip-count" id="cnt-americas">0</span></button>
+                <button class="continent-chip" id="chip-africa" onclick="filterEventsByContinent('Africa')">🌍 Africa <span class="chip-count" id="cnt-africa">0</span></button>
+                <button class="continent-chip" id="chip-oceania" onclick="filterEventsByContinent('Oceania')">🌏 Oceania <span class="chip-count" id="cnt-oceania">0</span></button>
+            </div>
+            <input type="text" class="table-search-input" id="table-search" placeholder="🔍 Search event title or category..." onkeyup="filterEventsTable()">
+        </div>
+
+        <!-- Data Table Container -->
+        <div class="glass-table-container">
+            <table class="glass-table">
+                <thead>
+                    <tr>
+                        <th>Disaster Event</th>
+                        <th>Category & Region</th>
+                        <th>Coordinates</th>
+                        <th>Occurred Date</th>
+                        <th>Severity</th>
+                        <th>Water Required</th>
+                        <th>Food Required</th>
+                        <th>Est. Budget</th>
+                        <th>Est. Rescue Time</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="events-table-body">
+                    <tr>
+                        <td colspan="10" style="text-align: center; color: var(--accent-neon-blue); font-weight: 600; padding: 30px;">⚡ Synchronizing live emergency events...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Client-side Script for Events Table -->
+    <script>
+        const API_HOSTS = [
+            window.location.origin.replace(':5500', ':8000'),
+            'http://127.0.0.1:8000',
+            'http://localhost:8000'
+        ];
+        let rawEventsData = [];
+        let activeContinent = 'All';
+        let searchQuery = '';
+        let activeApiHost = 'http://127.0.0.1:8000';
+
+        function downloadActionPlanPDF(evtId = 1) {
+            const targetUrl = `${activeApiHost}/api/export-report/${evtId}`;
+            window.open(targetUrl, '_blank');
+        }
+
+        function syncData() {
+            loadEventsData();
+        }
+
+        function refreshLogistics() {
+            loadEventsData();
+        }
+
+        async function apiFetch(path) {
+            for (const host of API_HOSTS) {
+                try {
+                    const res = await fetch(`${host}${path}`, { signal: AbortSignal.timeout(12000) });
+                    if (res.ok) {
+                        activeApiHost = host;
+                        return res;
+                    }
+                } catch (e) {}
+            }
+            return null;
+        }
+
+        function getContinent(lat, lon, title = '') {
+            const t = (title || '').toLowerCase();
+            if (t.includes('myanmar') || t.includes('japan') || t.includes('china') || t.includes('india') ||
+                t.includes('philippines') || t.includes('indonesia') || t.includes('thailand') || t.includes('vietnam') ||
+                t.includes('bago') || t.includes('yangon') || t.includes('asia') || t.includes('korea') || t.includes('taiwan')) {
+                return 'Asia';
+            }
+            if (t.includes('turkey') || t.includes('greece') || t.includes('italy') || t.includes('spain') ||
+                t.includes('france') || t.includes('germany') || t.includes('uk') || t.includes('europe') || t.includes('iceland')) {
+                return 'Europe';
+            }
+            if (t.includes('usa') || t.includes('mexico') || t.includes('brazil') || t.includes('chile') ||
+                t.includes('california') || t.includes('florida') || t.includes('canada') || t.includes('peru') || t.includes('america')) {
+                return 'Americas';
+            }
+            if (t.includes('egypt') || t.includes('madagascar') || t.includes('south africa') || t.includes('kenya') || t.includes('africa')) {
+                return 'Africa';
+            }
+            if (t.includes('australia') || t.includes('zealand') || t.includes('fiji') || t.includes('oceania')) {
+                return 'Oceania';
+            }
+            if (lat >= 5 && lat <= 55 && lon >= 60 && lon <= 150) return 'Asia';
+            if (lat >= 35 && lat <= 70 && lon >= -25 && lon <= 45) return 'Europe';
+            if (lat >= -55 && lat <= 70 && lon >= -170 && lon <= -30) return 'Americas';
+            if (lat >= -35 && lat <= 37 && lon >= -20 && lon <= 52) return 'Africa';
+            if (lat >= -50 && lat <= 0 && lon >= 110 && lon <= 180) return 'Oceania';
+            return 'Asia';
+        }
+
+        function formatOccurredTime(dateStr) {
+            if (!dateStr) return 'Just now';
+            try {
+                const date = new Date(dateStr);
+                if (isNaN(date.getTime())) return dateStr;
+                return date.toLocaleString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            } catch (e) {
+                return dateStr;
+            }
+        }
+
+        async function loadEventsData() {
+            try {
+                const res = await apiFetch('/api/stream-disasters');
+                if (res && res.ok) {
+                    rawEventsData = await res.json();
+                }
+            } catch (e) {
+                console.error('Failed to load events:', e);
+            }
+
+            renderEventsTable();
+        }
+
+        function filterEventsByContinent(cont) {
+            activeContinent = cont;
+            ['all', 'asia', 'europe', 'americas', 'africa', 'oceania'].forEach(c => {
+                const el = document.getElementById(`chip-${c}`);
+                if (el) el.classList.toggle('active', (c === cont.toLowerCase()) || (c === 'all' && cont === 'All'));
+            });
+            renderEventsTable();
+        }
+
+        function filterEventsTable() {
+            searchQuery = document.getElementById('table-search').value.toLowerCase().trim();
+            renderEventsTable();
+        }
+
+        function renderEventsTable() {
+            const tbody = document.getElementById('events-table-body');
+            tbody.innerHTML = '';
+
+            let totalWater = 0;
+            let totalFood = 0;
+            let severeCount = 0;
+
+            const counts = { All: rawEventsData.length, Asia: 0, Europe: 0, Americas: 0, Africa: 0, Oceania: 0 };
+
+            const filtered = rawEventsData.filter(evt => {
+                const lat = evt.latitude || evt.lat || 0;
+                const lon = evt.longitude || evt.lon || 0;
+                const title = evt.title || '';
+                const cont = getContinent(lat, lon, title);
+
+                if (counts.hasOwnProperty(cont)) counts[cont]++;
+                else counts['Asia']++;
+
+                if (activeContinent !== 'All' && cont !== activeContinent) return false;
+                if (searchQuery && !title.toLowerCase().includes(searchQuery)) return false;
+
+                return true;
+            });
+
+            document.getElementById('evt-stat-total').innerText = rawEventsData.length;
+
+            rawEventsData.forEach(e => {
+                const sev = e.severity || 5.0;
+                if (sev >= 7.0) severeCount++;
+                const pred = e.latest_prediction || (e.predictions && e.predictions[0]) || {};
+                totalWater += pred.water_liters || (e.water_needed_liters || 15000);
+                totalFood += pred.food_packs || (e.food_needed_packs || 2500);
+            });
+
+            document.getElementById('evt-stat-severe').innerText = severeCount;
+            document.getElementById('evt-stat-water').innerText = `${Math.round(totalWater).toLocaleString()} L`;
+            document.getElementById('evt-stat-food').innerText = `${Math.round(totalFood).toLocaleString()} Packs`;
+
+            ['all', 'asia', 'europe', 'americas', 'africa', 'oceania'].forEach(c => {
+                const key = c === 'all' ? 'All' : (c.charAt(0).toUpperCase() + c.slice(1));
+                const span = document.getElementById(`cnt-${c}`);
+                if (span) span.innerText = counts[key] || 0;
+            });
+
+            if (!filtered.length) {
+                if (!rawEventsData.length) {
+                    tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: var(--accent-neon-blue); font-weight: 600; padding: 30px;">⚡ Synchronizing live GDACS emergency events...</td></tr>';
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: var(--text-muted); padding: 30px;">No matching disaster events found for this filter.</td></tr>';
+                }
+                return;
+            }
+
+            filtered.forEach(evt => {
+                const lat = evt.latitude || evt.lat || 0;
+                const lon = evt.longitude || evt.lon || 0;
+                const title = evt.title || 'Disaster Event';
+                const sev = evt.severity || 5.0;
+                const cont = getContinent(lat, lon, title);
+                const timeStr = formatOccurredTime(evt.created_at || evt.pubDate);
+                const pred = evt.latest_prediction || (evt.predictions && evt.predictions[0]) || {};
+                const waterLiters = Math.round(pred.water_liters || evt.water_needed_liters || 15000);
+                const foodPacks = Math.round(pred.food_packs || evt.food_needed_packs || 2500);
+                const estBudget = evt.total_estimated_budget_usd || ((waterLiters * 0.5) + (foodPacks * 3.5));
+                const rescueTime = evt.estimated_rescue_time || evt.ai_rescue_time_hrs || 178;
+                const evtId = evt.id || 1;
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td style="font-weight: 700; color: #f8fafc;">⚠️ ${title}</td>
+                    <td><span class="badge-tag blue">${cont}</span></td>
+                    <td style="font-family: monospace; color: var(--text-muted);">${lat.toFixed(3)}, ${lon.toFixed(3)}</td>
+                    <td style="color: var(--accent-action-purple); font-weight: 600;">🕒 ${timeStr}</td>
+                    <td>
+                        <span style="font-weight: 800; color: ${sev >= 7.0 ? 'var(--accent-alert-red)' : 'var(--accent-warning-yellow)'}; background: ${sev >= 7.0 ? 'rgba(255, 68, 68, 0.15)' : 'rgba(255, 204, 0, 0.15)'}; padding: 3px 8px; border-radius: 6px; border: 1px solid ${sev >= 7.0 ? 'rgba(255, 68, 68, 0.3)' : 'rgba(255, 204, 0, 0.3)'};">
+                            SEV ${sev}/10
+                        </span>
+                    </td>
+                    <td style="color: var(--accent-neon-blue); font-weight: 700;">${waterLiters.toLocaleString()} L</td>
+                    <td style="color: var(--accent-warning-yellow); font-weight: 700;">${foodPacks.toLocaleString()} Packs</td>
+                    <td style="color: var(--accent-green); font-weight: 800;">$${Math.round(estBudget).toLocaleString()} USD</td>
+                    <td style="color: var(--accent-action-purple); font-weight: 700;">${rescueTime} hrs</td>
+                    <td>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <a href="index.html?lat=${lat}&lon=${lon}&title=${encodeURIComponent(title)}&sev=${sev}" class="btn-nav-blue" style="padding: 4px 8px; font-size: 11px; text-decoration: none;">
+                                🗺️ Map
+                            </a>
+                            <button onclick="downloadActionPlanPDF(${evtId})" class="btn-nav-purple" style="padding: 4px 8px; font-size: 11px;">
+                                📄 PDF
+                            </button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        loadEventsData();
+    </script>
+</body>
+</html>

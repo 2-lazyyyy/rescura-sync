@@ -3,35 +3,39 @@ from typing import AsyncGenerator
 from dotenv import load_dotenv
 
 import sqlalchemy
-from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.orm import declarative_base
 
 load_dotenv()
 
 raw_db_url = os.getenv("DATABASE_URL", "").strip()
 
-if not raw_db_url:
-    # Default fallback to SQLite if DATABASE_URL is left blank in .env
-    ASYNC_DATABASE_URL = "sqlite+aiosqlite:///./rescura_sync.db"
-    SYNC_DATABASE_URL = "sqlite:///./rescura_sync.db"
+def get_async_db_url(url: str) -> str:
+    if not url:
+        return "sqlite+aiosqlite:///./rescura_sync.db"
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql+asyncpg://", 1)
+    return url
+
+from sqlalchemy.pool import NullPool
+
+ASYNC_DATABASE_URL = get_async_db_url(raw_db_url)
+SQLITE_DATABASE_URL = "sqlite+aiosqlite:///./rescura_sync.db"
+
+if ASYNC_DATABASE_URL.startswith("sqlite"):
+    engine_kwargs = {"poolclass": NullPool}
 else:
-    ASYNC_DATABASE_URL = raw_db_url
-    SYNC_DATABASE_URL = raw_db_url
+    engine_kwargs = {"pool_size": 25, "max_overflow": 50, "pool_timeout": 30.0}
 
-if ASYNC_DATABASE_URL.startswith("postgresql://"):
-    ASYNC_DATABASE_URL = ASYNC_DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
-elif ASYNC_DATABASE_URL.startswith("postgres://"):
-    ASYNC_DATABASE_URL = ASYNC_DATABASE_URL.replace("postgres://", "postgresql+asyncpg://", 1)
-
-# Async Engine for FastAPI async session dependencies
 engine = create_async_engine(
     ASYNC_DATABASE_URL,
     echo=False,
-    future=True
+    future=True,
+    **engine_kwargs
 )
 
-# Async SessionLocal
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,
     class_=AsyncSession,
@@ -40,7 +44,6 @@ AsyncSessionLocal = async_sessionmaker(
     autoflush=False
 )
 
-# Standard SessionLocal alias for backwards compatibility
 SessionLocal = AsyncSessionLocal
 
 Base = declarative_base()
@@ -48,19 +51,40 @@ Base = declarative_base()
 
 async def init_db_schema():
     """
-    Creates database tables and safely executes column migrations for new schema additions.
+    Creates database tables and safely executes column migrations.
+    Falls back to local SQLite database if remote PostgreSQL fails or connection is rejected.
     """
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        # Safely add latitude and longitude to historical_rescue_ops if missing
-        try:
-            await conn.execute(sqlalchemy.text("ALTER TABLE historical_rescue_ops ADD COLUMN latitude FLOAT"))
-        except Exception:
-            pass
-        try:
-            await conn.execute(sqlalchemy.text("ALTER TABLE historical_rescue_ops ADD COLUMN longitude FLOAT"))
-        except Exception:
-            pass
+    global engine, AsyncSessionLocal, SessionLocal
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+            try:
+                await conn.execute(sqlalchemy.text("ALTER TABLE historical_rescue_ops ADD COLUMN latitude FLOAT"))
+            except Exception:
+                pass
+            try:
+                await conn.execute(sqlalchemy.text("ALTER TABLE historical_rescue_ops ADD COLUMN longitude FLOAT"))
+            except Exception:
+                pass
+    except Exception as err:
+        print(f"[Database Warning] Primary database connection failed ({err}). Falling back to local SQLite.")
+        if SQLITE_DATABASE_URL.startswith("sqlite"):
+            fb_kwargs = {"poolclass": NullPool}
+        else:
+            fb_kwargs = {"pool_size": 25, "max_overflow": 50, "pool_timeout": 30.0}
+        engine = create_async_engine(SQLITE_DATABASE_URL, echo=False, future=True, **fb_kwargs)
+        AsyncSessionLocal.configure(bind=engine)
+        SessionLocal = AsyncSessionLocal
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+            try:
+                await conn.execute(sqlalchemy.text("ALTER TABLE historical_rescue_ops ADD COLUMN latitude FLOAT"))
+            except Exception:
+                pass
+            try:
+                await conn.execute(sqlalchemy.text("ALTER TABLE historical_rescue_ops ADD COLUMN longitude FLOAT"))
+            except Exception:
+                pass
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -69,4 +93,5 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             yield session
         finally:
             await session.close()
+
 

@@ -1,12 +1,17 @@
 import asyncio
 import json
 import os
+from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 from typing import Optional, List, Dict, Any, cast
 from pydantic import BaseModel, Field
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
+try:
+    from fpdf import FPDF  # type: ignore
+except ImportError:
+    FPDF = None  # type: ignore
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text, select
 from sqlalchemy.orm import selectinload
@@ -20,10 +25,49 @@ from services.supabase_client import fetch_recent_sos_alerts, aggregate_sos_demo
 from data_pipeline import ingest_mock_historical_data
 from ml_model import ingest_rescue_data, train_rescue_model, predict_rescue_needs
 from analytics import generate_mission_report
-from routing import find_nearest_depot
+from routing import find_nearest_depot, haversine_distance
 from spatial_engine import analyze_disaster_impact
+from email.utils import parsedate_to_datetime
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def is_within_asean(lat: float, lon: float) -> bool:
+    """
+    Checks if geographic coordinates fall within the ASEAN bounding box.
+    Latitude: -11.0 to 29.0, Longitude: 92.0 to 142.0.
+    """
+    try:
+        return -11.0 <= float(lat) <= 29.0 and 92.0 <= float(lon) <= 142.0
+    except (ValueError, TypeError):
+        return False
+
+
+is_in_asean = is_within_asean
+
+
+def parse_created_at(date_val: Any) -> datetime:
+    """
+    Parses various date types (ISO string, RFC-2822 string, datetime) into a UTC datetime object.
+    """
+    if not date_val:
+        return datetime.now(timezone.utc)
+    if isinstance(date_val, datetime):
+        return date_val.astimezone(timezone.utc) if date_val.tzinfo else date_val.replace(tzinfo=timezone.utc)
+    try:
+        dt = parsedate_to_datetime(str(date_val))
+        if dt:
+            return dt.astimezone(timezone.utc)
+    except Exception:
+        pass
+    try:
+        clean_str = str(date_val).replace("Z", "+00:00")
+        dt = datetime.fromisoformat(clean_str)
+        return dt.astimezone(timezone.utc)
+    except Exception:
+        pass
+    return datetime.now(timezone.utc)
+
 
 # Initialize global ReliefPredictor instance
 predictor = ReliefPredictor()
@@ -53,13 +97,44 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"Warning during initial model training: {e}")
 
+    # Seed active disaster events into database on startup if empty
+    try:
+        async with AsyncSessionLocal() as db:
+            stmt = select(models.DisasterEvent)
+            res = await db.execute(stmt)
+            if not res.scalars().first():
+                disasters = await fetch_active_disasters()
+                for d in disasters:
+                    dt_val = parse_created_at(d.get("created_at"))
+                    evt = models.DisasterEvent(
+                        title=d["title"],
+                        latitude=d["lat"],
+                        longitude=d["lon"],
+                        severity=d["severity"],
+                        created_at=dt_val
+                    )
+                    db.add(evt)
+                await db.commit()
+                print(f"[Startup Seeding] Database populated with {len(disasters)} active disaster events.")
+    except Exception as seed_err:
+        print(f"Startup seeding notice: {seed_err}")
+
     # Launch asynchronous background GDACS disaster polling task
     poller_task = asyncio.create_task(poll_gdacs_loop())
 
     yield
 
-    # Cancel background task on application shutdown
+    # Clean shutdown handling on Ctrl + C / application exit
     poller_task.cancel()
+    try:
+        await poller_task
+    except (asyncio.CancelledError, Exception):
+        pass
+
+    try:
+        await engine.dispose()
+    except Exception:
+        pass
 
 
 
@@ -186,7 +261,10 @@ async def live_alerts(db: AsyncSession = Depends(get_db)):
         new_preds = []
         for event in new_events:
             await db.refresh(event)
-            ai_data = predict_rescue_needs(severity=event.severity, affected_people=5000, lat=event.latitude, lon=event.longitude)
+            sev = float(event.severity) if event.severity is not None else 5.0
+            lat = float(event.latitude) if event.latitude is not None else 0.0
+            lon = float(event.longitude) if event.longitude is not None else 0.0
+            ai_data = predict_rescue_needs(severity=sev, affected_people=5000, lat=lat, lon=lon)
             pred = models.ReliefPrediction(
                 disaster_id=event.id,
                 water_liters=ai_data["water_liters"],
@@ -207,7 +285,8 @@ async def live_alerts(db: AsyncSession = Depends(get_db)):
                 "title": evt.title,
                 "latitude": evt.latitude,
                 "longitude": evt.longitude,
-                "severity": evt.severity
+                "severity": evt.severity,
+                "created_at": evt.created_at.isoformat() if hasattr(evt, 'created_at') and evt.created_at else None
             } for evt in saved_records
         ]
     }
@@ -275,25 +354,29 @@ async def predict_relief(
         await db.commit()
         await db.refresh(event_rec)
 
-    # Fetch live SOS alerts from mobile reports to refine demographic input
+    # Synchronize demographic calculation with analyze_disaster_impact
+    spatial = analyze_disaster_impact(lat, lon, severity)
+    w_liters = round(spatial.get("total_water_liters", severity * 15000))
+    f_packs = round(spatial.get("total_food_packs", severity * 4000))
+    affected_pop = spatial.get("affected_population", 5000)
+
     raw_sos_alerts = await fetch_recent_sos_alerts()
     sos_metrics = aggregate_sos_demographics(raw_sos_alerts)
-    effective_population = max(population, sos_metrics.get("total_affected_people", 0) * 10)
 
-    # Find nearest supply depot first
-    nearest_depot_data = await find_nearest_depot(target_lat=lat, target_lon=lon, db=db)
-    nearest_depot_info = nearest_depot_data.get("nearest_depot", {})
-    distance_km = nearest_depot_info.get("distance_km", 10.0)
-
-    # Calculate dispatch travel time assuming emergency supply convoy speed of ~45 km/h
-    dispatch_travel_hours = round(distance_km / 45.0, 1)
+    if is_within_asean(lat, lon):
+        nearest_depot_data = await find_nearest_depot(target_lat=lat, target_lon=lon, db=db)
+        nearest_depot_info = nearest_depot_data.get("nearest_depot", {})
+        distance_km = nearest_depot_info.get("distance_km", 0.0)
+        dispatch_travel_hours = round(distance_km / 45.0, 1)
+    else:
+        nearest_depot_info = None
+        dispatch_travel_hours = 0.0
 
     gis_data = await get_evacuation_routes(lat=lat, lon=lon, radius_km=radius_km)
-    
-    # Use upgraded RandomForest Multi-Target ML model predictions
-    ai_data = predict_rescue_needs(severity=severity, affected_people=effective_population)
+    ai_data = predict_rescue_needs(severity=severity, affected_people=affected_pop, lat=lat, lon=lon)
+    ai_data["water_liters"] = w_liters
+    ai_data["food_packs"] = f_packs
 
-    # Total rescue time = dispatch travel time + on-site operation time
     on_site_time = ai_data.get("estimated_rescue_time", 4.5)
     total_rescue_time = round(on_site_time + dispatch_travel_hours, 1)
 
@@ -350,11 +433,13 @@ async def dashboard_data(db: AsyncSession = Depends(get_db)):
     if not events:
         disasters = await fetch_active_disasters()
         for d in disasters:
+            dt_val = parse_created_at(d.get("created_at"))
             evt = models.DisasterEvent(
                 title=d["title"],
                 latitude=d["lat"],
                 longitude=d["lon"],
-                severity=d["severity"]
+                severity=d["severity"],
+                created_at=dt_val
             )
             db.add(evt)
         await db.commit()
@@ -362,22 +447,64 @@ async def dashboard_data(db: AsyncSession = Depends(get_db)):
         result = await db.execute(stmt)
         events = result.scalars().unique().all()
 
+    events = events[:50]
+
+    depots_stmt = select(models.RescueDepot)
+    depots_res = await db.execute(depots_stmt)
+    all_depots = depots_res.scalars().all()
+
     payload = []
     for evt in events:
-        predictions_list = [
-            {
-                "id": pred.id,
-                "water_liters": pred.water_liters,
-                "food_packs": pred.food_packs,
-                "created_at": pred.created_at.isoformat() if pred.created_at else None
-            } for pred in evt.predictions
-        ]
+        lat_val = float(evt.latitude) if evt.latitude is not None else 0.0
+        lon_val = float(evt.longitude) if evt.longitude is not None else 0.0
+        sev_val = float(evt.severity) if evt.severity is not None else 5.0
 
-        latest_pred = predictions_list[0] if predictions_list else None
+        spatial = analyze_disaster_impact(lat_val, lon_val, sev_val)
+        w_val = float(spatial.get("total_water_liters") or (sev_val * 15000.0))
+        f_val = float(spatial.get("total_food_packs") or (sev_val * 4000.0))
+        w_liters = round(w_val)
+        f_packs = round(f_val)
+        affected_pop = int(spatial.get("affected_population") or 5000)
+        total_budget = float(spatial.get("total_estimated_budget_usd") or round((w_liters * 0.5) + (f_packs * 3.5), 2))
 
-        # Predict rescue time using ML model factoring in latitude and longitude distance to nearest depot
-        ml_pred = predict_rescue_needs(severity=evt.severity, affected_people=5000, lat=evt.latitude, lon=evt.longitude)
-        est_rescue_time = ml_pred.get("estimated_rescue_time", 4.5)
+        ml_pred = predict_rescue_needs(severity=sev_val, affected_people=affected_pop, lat=lat_val, lon=lon_val)
+        base_rescue_time = ml_pred.get("estimated_rescue_time", 4.5)
+
+        nearest_depot_info: Optional[Dict[str, Any]] = None
+        if is_within_asean(lat_val, lon_val) and all_depots:
+            def get_depot_dist(d: Any) -> float:
+                d_lat = float(getattr(d, "latitude", 0.0) or 0.0)
+                d_lon = float(getattr(d, "longitude", 0.0) or 0.0)
+                return haversine_distance(lat_val, lon_val, d_lat, d_lon)
+
+            closest_depot = min(all_depots, key=get_depot_dist)
+            c_lat = float(getattr(closest_depot, "latitude", 0.0) or 0.0)
+            c_lon = float(getattr(closest_depot, "longitude", 0.0) or 0.0)
+            dist = haversine_distance(lat_val, lon_val, c_lat, c_lon)
+            nearest_depot_info = {
+                "id": closest_depot.id,
+                "name": closest_depot.name,
+                "latitude": c_lat,
+                "longitude": c_lon,
+                "water_inventory": float(getattr(closest_depot, "water_inventory", 0.0) or 0.0),
+                "food_inventory": float(getattr(closest_depot, "food_inventory", 0.0) or 0.0),
+                "distance_km": round(dist, 2)
+            }
+
+        dispatch_hours = 0.0
+        if nearest_depot_info is not None:
+            dist_km = float(nearest_depot_info.get("distance_km", 0.0))
+            dispatch_hours = round(dist_km / 45.0, 1)
+
+        total_rescue_time = round(base_rescue_time + dispatch_hours, 1)
+
+        latest_pred = {
+            "id": evt.id,
+            "water_liters": w_liters,
+            "food_packs": f_packs,
+            "total_estimated_budget_usd": total_budget,
+            "created_at": evt.created_at.strftime("%Y-%m-%d %H:%M:%S UTC") if evt.created_at else None
+        }
 
         payload.append({
             "id": evt.id,
@@ -385,10 +512,12 @@ async def dashboard_data(db: AsyncSession = Depends(get_db)):
             "latitude": evt.latitude,
             "longitude": evt.longitude,
             "severity": evt.severity,
-            "created_at": evt.created_at.isoformat() if evt.created_at else None,
-            "predictions": predictions_list,
+            "created_at": evt.created_at.strftime("%Y-%m-%d %H:%M:%S UTC") if evt.created_at else None,
+            "predictions": [latest_pred],
             "latest_prediction": latest_pred,
-            "estimated_rescue_time": est_rescue_time
+            "estimated_rescue_time": total_rescue_time,
+            "total_estimated_budget_usd": total_budget,
+            "nearest_depot": nearest_depot_info
         })
 
     return {
@@ -396,6 +525,163 @@ async def dashboard_data(db: AsyncSession = Depends(get_db)):
         "count": len(payload),
         "dashboard_data": payload
     }
+
+
+@app.get("/api/export-report/{event_id}", tags=["reports"])
+async def export_action_plan_pdf(event_id: int, db: AsyncSession = Depends(get_db)):
+    """
+    Generates an enterprise-grade Emergency Action Plan PDF report for a given disaster event ID.
+    Returns the PDF binary as a downloadable attachment.
+    """
+    stmt = (
+        select(models.DisasterEvent)
+        .options(selectinload(models.DisasterEvent.predictions))
+        .where(models.DisasterEvent.id == event_id)
+    )
+    result = await db.execute(stmt)
+    evt = result.scalars().first()
+
+    if not evt:
+        stmt_latest = select(models.DisasterEvent).order_by(models.DisasterEvent.id.desc())
+        res_latest = await db.execute(stmt_latest)
+        evt = res_latest.scalars().first()
+
+    if not evt:
+        raise HTTPException(status_code=404, detail="Disaster event not found.")
+
+    lat_val = float(evt.latitude) if evt.latitude is not None else 0.0
+    lon_val = float(evt.longitude) if evt.longitude is not None else 0.0
+    sev_val = float(evt.severity) if evt.severity is not None else 5.0
+
+    evt_id = int(getattr(evt, "id", 1))
+    evt_title = str(getattr(evt, "title", "Emergency Disaster Zone"))
+
+    spatial = analyze_disaster_impact(lat_val, lon_val, sev_val)
+    w_val = float(spatial.get("total_water_liters") or (sev_val * 15000.0))
+    f_val = float(spatial.get("total_food_packs") or (sev_val * 4000.0))
+    w_liters = round(w_val)
+    f_packs = round(f_val)
+    affected_pop = int(spatial.get("affected_population") or 5000)
+    total_budget = float(spatial.get("total_estimated_budget_usd") or round((w_liters * 0.5) + (f_packs * 3.5), 2))
+
+    ml_pred = predict_rescue_needs(severity=sev_val, affected_people=affected_pop, lat=lat_val, lon=lon_val)
+    base_rescue_time = float(ml_pred.get("estimated_rescue_time", 4.5))
+
+    depot_res = await find_nearest_depot(target_lat=lat_val, target_lon=lon_val, db=db)
+    nearest_depot_info = depot_res.get("nearest_depot", {}) if is_within_asean(lat_val, lon_val) else None
+
+    dispatch_hours = 0.0
+    depot_name = "Out of ASEAN Dispatch Zone"
+    distance_km = 0.0
+    if nearest_depot_info and isinstance(nearest_depot_info, dict) and "distance_km" in nearest_depot_info:
+        dispatch_hours = round(float(nearest_depot_info.get("distance_km", 0.0)) / 45.0, 1)
+        depot_name = str(nearest_depot_info.get("name", "Assigned Depot"))
+        distance_km = float(nearest_depot_info.get("distance_km", 0.0))
+
+    total_rescue_time = round(base_rescue_time + dispatch_hours, 1)
+    evt_created = getattr(evt, "created_at", None)
+    occurred_str = evt_created.strftime("%b %d, %Y, %H:%M UTC") if evt_created else "Aug 9, 2026, 17:15 UTC"
+
+    if FPDF is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="PDF generation is unavailable because 'fpdf2' package is not installed."
+        )
+
+    pdf = FPDF()
+    pdf.add_page()
+
+    # Header Bar
+    pdf.set_fill_color(15, 23, 42)
+    pdf.rect(0, 0, 210, 38, 'F')
+
+    pdf.set_font("Helvetica", "B", 20)
+    pdf.set_text_color(56, 189, 248)
+    pdf.set_xy(14, 8)
+    pdf.cell(0, 10, "RESCURA SYNC", new_x="LMARGIN", new_y="NEXT")
+
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_text_color(148, 163, 184)
+    pdf.set_xy(14, 20)
+    pdf.cell(0, 6, "AUTOMATED HUMANITARIAN EMERGENCY ACTION PLAN", new_x="LMARGIN", new_y="NEXT")
+
+    # Title & Metadata
+    pdf.set_xy(14, 45)
+    pdf.set_font("Helvetica", "B", 15)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(0, 10, f"Event: {evt_title}", new_x="LMARGIN", new_y="NEXT")
+
+    pdf.set_font("Helvetica", "", 10)
+    pdf.set_text_color(100, 116, 139)
+    pdf.cell(0, 6, f"Report ID: RES-EAP-{evt_id:04d}  |  Occurred: {occurred_str}", new_x="LMARGIN", new_y="NEXT")
+
+    pdf.ln(6)
+
+    # Section 1: Emergency Characteristics
+    pdf.set_fill_color(241, 245, 249)
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(182, 8, "  1. EMERGENCY CHARACTERISTICS & DISPATCH ZONE", new_x="LMARGIN", new_y="NEXT", fill=True)
+    pdf.ln(2)
+
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(91, 7, f"  Coordinates: {lat_val:.4f}, {lon_val:.4f}", border=1)
+    pdf.cell(91, 7, f"  Severity Index: SEV {sev_val}/10", border=1, new_x="LMARGIN", new_y="NEXT")
+
+    pdf.cell(91, 7, f"  Affected Population: {affected_pop:,} people", border=1)
+    pdf.cell(91, 7, f"  Est. Rescue Time: {total_rescue_time} hours", border=1, new_x="LMARGIN", new_y="NEXT")
+
+    pdf.cell(182, 7, f"  Assigned Supply Depot: {depot_name} ({distance_km} km)", border=1, new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(6)
+
+    # Section 2: Financial Cost Engine & Supply Logistics
+    pdf.set_fill_color(241, 245, 249)
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(182, 8, "  2. FINANCIAL COST ENGINE & HUMANITARIAN ALLOCATIONS", new_x="LMARGIN", new_y="NEXT", fill=True)
+    pdf.ln(2)
+
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(91, 7, f"  Clean Water Required: {w_liters:,} Liters ($0.50/L)", border=1)
+    pdf.cell(91, 7, f"  Est. Water Budget: ${w_liters * 0.5:,.2f} USD", border=1, new_x="LMARGIN", new_y="NEXT")
+
+    pdf.cell(91, 7, f"  Food Packs Required: {f_packs:,} Packs ($3.50/Pack)", border=1)
+    pdf.cell(91, 7, f"  Est. Food Budget: ${f_packs * 3.5:,.2f} USD", border=1, new_x="LMARGIN", new_y="NEXT")
+
+    pdf.set_fill_color(224, 231, 255)
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_text_color(30, 58, 138)
+    pdf.cell(182, 9, f"  TOTAL ESTIMATED ALLOCATION BUDGET: ${total_budget:,.2f} USD", border=1, new_x="LMARGIN", new_y="NEXT", fill=True)
+
+    pdf.ln(6)
+
+    # Section 3: Operational Directives
+    pdf.set_fill_color(241, 245, 249)
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(182, 8, "  3. OPERATIONAL DISPATCH DIRECTIVES", new_x="LMARGIN", new_y="NEXT", fill=True)
+    pdf.ln(2)
+
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(71, 85, 105)
+    directives = [
+        "1. Dispatch supply convoys along optimal GIS evacuation road nodes upon order authorization.",
+        "2. Ensure water distribution meets Sphere Project minimum standard of 20 Liters per person/day.",
+        "3. Monitor mobile civilian SOS signal alerts within 50km radius to prioritize high-vulnerability clusters.",
+        "4. Maintain real-time telemetry sync with Rescura Sync SAC Control Center."
+    ]
+    for d in directives:
+        pdf.cell(182, 6, f"  {d}", new_x="LMARGIN", new_y="NEXT")
+
+    raw_output = pdf.output()
+    pdf_bytes = bytes(raw_output) if not isinstance(raw_output, bytes) else raw_output
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename=Rescura_Sync_Action_Plan_Event_{evt_id}.pdf"
+        }
+    )
 
 
 @app.get("/api/depots", tags=["depots"])
@@ -523,7 +809,7 @@ async def nearest_depot(lat: float, lon: float, db: AsyncSession = Depends(get_d
 async def build_emergency_payload(disaster_event: Any, db: AsyncSession) -> Dict[str, Any]:
     """
     Merges 50km radius spatial demographic impact analysis with assigned nearest depot routing.
-    Safely handles both SQLAlchemy DisasterEvent ORM instances and dictionary payloads.
+    Restricts supply logistics routing and spatial calculations exclusively to events within ASEAN bounds.
     """
     if isinstance(disaster_event, dict):
         evt_id = disaster_event.get("id", 1)
@@ -531,16 +817,28 @@ async def build_emergency_payload(disaster_event: Any, db: AsyncSession) -> Dict
         lat = float(disaster_event.get("latitude") or disaster_event.get("lat") or 0.0)
         lon = float(disaster_event.get("longitude") or disaster_event.get("lon") or 0.0)
         severity = float(disaster_event.get("severity", 5.0))
+        created_at = str(disaster_event.get("created_at") or datetime.now(timezone.utc).isoformat())
     else:
         evt_id = getattr(disaster_event, "id", 1)
         title = str(getattr(disaster_event, "title", "Emergency Disaster Epicenter"))
         lat = cast(float, getattr(disaster_event, "latitude", 0.0))
         lon = cast(float, getattr(disaster_event, "longitude", 0.0))
         severity = cast(float, getattr(disaster_event, "severity", 5.0))
+        created_at_val = getattr(disaster_event, "created_at", None)
+        created_at = created_at_val.isoformat() if created_at_val else datetime.now(timezone.utc).isoformat()
 
-    spatial = analyze_disaster_impact(lat, lon, severity)
-    depot_res = await find_nearest_depot(target_lat=lat, target_lon=lon, db=db)
-    nearest_depot_info = depot_res.get("nearest_depot", {})
+    if is_within_asean(lat, lon):
+        spatial = analyze_disaster_impact(lat, lon, severity)
+        depot_res = await find_nearest_depot(target_lat=lat, target_lon=lon, db=db)
+        nearest_depot_info = depot_res.get("nearest_depot", None)
+        affected_population = spatial.get("affected_population", 0)
+        total_water_liters = spatial.get("total_water_liters", 0.0)
+        total_food_packs = spatial.get("total_food_packs", 0.0)
+    else:
+        nearest_depot_info = None
+        affected_population = 0
+        total_water_liters = 0.0
+        total_food_packs = 0.0
 
     return {
         "id": evt_id,
@@ -548,25 +846,19 @@ async def build_emergency_payload(disaster_event: Any, db: AsyncSession) -> Dict
         "latitude": lat,
         "longitude": lon,
         "severity": severity,
-        "affected_population": spatial.get("affected_population", 0),
-        "total_water_liters": spatial.get("total_water_liters", 0.0),
-        "total_food_packs": spatial.get("total_food_packs", 0.0),
+        "created_at": created_at,
+        "affected_population": affected_population,
+        "total_water_liters": total_water_liters,
+        "total_food_packs": total_food_packs,
         "nearest_depot": nearest_depot_info
     }
 
 
-def is_within_asean(lat: float, lon: float) -> bool:
-    """
-    Checks if geographic coordinates fall within Myanmar & ASEAN region.
-    """
-    return -11.0 <= lat <= 28.5 and 90.0 <= lon <= 141.0
-
-
 async def poll_gdacs_loop():
     """
-    Background task that continuously polls the GDACS RSS/XML feed for real disasters,
-    filters for Myanmar & ASEAN coordinates, computes spatial demographic impact and nearest depot routing,
-    saves non-duplicate records to the database, and broadcasts payloads to the SSE stream queue.
+    Background task that continuously polls GDACS for real disasters,
+    saves non-duplicate records for all global events to the database,
+    and broadcasts payloads for ASEAN events into the SSE stream queue.
     """
     print("[GDACS Background Poller] Polling task initialized and running...")
     while True:
@@ -580,28 +872,29 @@ async def poll_gdacs_loop():
                         title = str(d["title"])
                         severity = float(d["severity"])
 
-                        # Check bounding box filter for Myanmar (9.0..29.0, 92.0..102.0) and ASEAN
-                        if is_within_asean(lat, lon):
-                            stmt = select(models.DisasterEvent).where(
-                                models.DisasterEvent.latitude == lat,
-                                models.DisasterEvent.longitude == lon
+                        stmt = select(models.DisasterEvent).where(
+                            models.DisasterEvent.latitude == lat,
+                            models.DisasterEvent.longitude == lon
+                        )
+                        res = await db.execute(stmt)
+                        existing = res.scalars().first()
+
+                        if not existing:
+                            dt_val = parse_created_at(d.get("created_at"))
+                            event = models.DisasterEvent(
+                                title=title,
+                                latitude=lat,
+                                longitude=lon,
+                                severity=severity,
+                                created_at=dt_val
                             )
-                            res = await db.execute(stmt)
-                            existing = res.scalars().first()
+                            db.add(event)
+                            await db.commit()
+                            await db.refresh(event)
 
-                            if not existing:
-                                event = models.DisasterEvent(
-                                    title=title,
-                                    latitude=lat,
-                                    longitude=lon,
-                                    severity=severity
-                                )
-                                db.add(event)
-                                await db.commit()
-                                await db.refresh(event)
+                            payload = await build_emergency_payload(event, db)
 
-                                payload = await build_emergency_payload(event, db)
-
+                            if is_within_asean(lat, lon):
                                 pred = models.ReliefPrediction(
                                     disaster_id=event.id,
                                     water_liters=payload.get("total_water_liters", 0.0),
@@ -611,21 +904,27 @@ async def poll_gdacs_loop():
                                 await db.commit()
 
                                 await sse_event_queue.put(payload)
-                                print(f"[GDACS Background Poller] Queued new live emergency payload: {title}")
+                                print(f"[GDACS Background Poller] Queued live emergency payload for ASEAN event: {title}")
                     except Exception as item_err:
                         print(f"[GDACS Background Poller] Notice for item: {item_err}")
+        except asyncio.CancelledError:
+            print("[GDACS Background Poller] Polling task gracefully cancelled.")
+            break
         except Exception as poll_err:
             print(f"[GDACS Background Poller] Polling cycle notice: {poll_err}")
 
-        # Sleep for 60 seconds before next polling cycle
-        await asyncio.sleep(60)
+        try:
+            await asyncio.sleep(60)
+        except asyncio.CancelledError:
+            print("[GDACS Background Poller] Interrupted sleep for clean application exit.")
+            break
 
 
 @app.get("/api/stream-disasters", tags=["stream"])
-async def stream_disasters(db: AsyncSession = Depends(get_db)):
+async def stream_disasters():
     """
     Server-Sent Events (SSE) stream endpoint pushing high-priority live emergency disaster events
-    within Myanmar & ASEAN regions with spatial demographic impact calculations.
+    within ASEAN regions with spatial demographic impact calculations.
     """
     async def event_generator():
         while True:
@@ -637,13 +936,14 @@ async def stream_disasters(db: AsyncSession = Depends(get_db)):
                     pass
 
                 if not payload:
-                    stmt = select(models.DisasterEvent).order_by(models.DisasterEvent.id.desc()).limit(20)
-                    res = await db.execute(stmt)
-                    events = res.scalars().all()
-                    asean_events = [e for e in events if is_within_asean(float(e.latitude), float(e.longitude))]
-                    if asean_events:
-                        top_evt = asean_events[0]
-                        payload = await build_emergency_payload(top_evt, db)
+                    async with AsyncSessionLocal() as db:
+                        stmt = select(models.DisasterEvent).order_by(models.DisasterEvent.id.desc())
+                        res = await db.execute(stmt)
+                        events = res.scalars().all()
+                        asean_events = [e for e in events if is_within_asean(float(e.latitude), float(e.longitude))]
+                        if asean_events:
+                            top_evt = asean_events[0]
+                            payload = await build_emergency_payload(top_evt, db)
 
                 if payload:
                     json_str = json.dumps(payload)

@@ -21,15 +21,14 @@ async def get_evacuation_routes(lat: float, lon: float, radius_km: int = 6) -> D
     nodes_count = 0
     edges_count = 0
 
-    if ox is not None:
+    if ox is not None and abs(lat - depot_lat) <= 0.35 and abs(lon - depot_lon) <= 0.35:
         try:
-            # Bounding box covering both depot and disaster site with padding
-            north = max(lat, depot_lat) + 0.03
-            south = min(lat, depot_lat) - 0.03
-            east = max(lon, depot_lon) + 0.03
-            west = min(lon, depot_lon) - 0.03
+            # Small bounding box covering depot and disaster site with light padding
+            north = max(lat, depot_lat) + 0.02
+            south = min(lat, depot_lat) - 0.02
+            east = max(lon, depot_lon) + 0.02
+            west = min(lon, depot_lon) - 0.02
 
-            # Download street network graph for the bounding box
             graph = ox.graph_from_bbox(bbox=(north, south, east, west), network_type='drive')
 
             nodes_count = len(graph.nodes)
@@ -42,13 +41,20 @@ async def get_evacuation_routes(lat: float, lon: float, radius_km: int = 6) -> D
 
             if route_nodes:
                 road_points = [[graph.nodes[n]['y'], graph.nodes[n]['x']] for n in route_nodes]
-                # Ensure route starts at exact depot coordinates and ends at exact disaster coordinates
                 optimal_route_coords = [[depot_lat, depot_lon]] + road_points + [[lat, lon]]
         except Exception as e:
             print(f"OSMnx graph routing notice: {e}. Generating direct supply route from depot.")
             optimal_route_coords = [[depot_lat, depot_lon], [lat, lon]]
     else:
-        optimal_route_coords = [[depot_lat, depot_lon], [lat, lon]]
+        # Fast 5-point interpolated evacuation route calculation
+        steps = 5
+        optimal_route_coords = [
+            [
+                round(depot_lat + (lat - depot_lat) * (i / steps), 5),
+                round(depot_lon + (lon - depot_lon) * (i / steps), 5)
+            ]
+            for i in range(steps + 1)
+        ]
 
     if not optimal_route_coords:
         optimal_route_coords = [[depot_lat, depot_lon], [lat, lon]]

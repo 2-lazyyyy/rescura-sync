@@ -24,16 +24,24 @@ def calculate_haversine_distance(lat1: float, lon1: float, lat2: float, lon2: fl
     return R * c
 
 
+_demographics_df = None
+
+def get_demographics_df() -> pd.DataFrame:
+    global _demographics_df
+    if _demographics_df is None:
+        if os.path.exists(DEMOGRAPHICS_CSV_PATH):
+            _demographics_df = pd.read_csv(DEMOGRAPHICS_CSV_PATH)
+        else:
+            _demographics_df = pd.DataFrame(columns=['city', 'latitude', 'longitude', 'population'])
+    return _demographics_df
+
+
 def analyze_disaster_impact(disaster_lat: float, disaster_lon: float, severity: float) -> Dict[str, Any]:
     """
     Analyzes disaster impact within a 50km radius using Myanmar demographic data.
     Calculates affected population and required Sphere Project humanitarian supplies (water and food).
     """
-    if not os.path.exists(DEMOGRAPHICS_CSV_PATH):
-        raise FileNotFoundError(f"Demographic dataset not found at {DEMOGRAPHICS_CSV_PATH}")
-
-    # 1. Load myanmar_demographics.csv using Pandas
-    df = pd.read_csv(DEMOGRAPHICS_CSV_PATH)
+    df = get_demographics_df()
 
     affected_cities = []
     total_affected_population = 0
@@ -67,9 +75,17 @@ def analyze_disaster_impact(disaster_lat: float, disaster_lon: float, severity: 
     severity_multiplier = max(1.0, float(severity) / 5.0)
 
     total_water_liters = round(base_water_liters * severity_multiplier, 1)
+    total_water_liters = round(base_water_liters * severity_multiplier, 1)
     total_food_packs = round(base_food_packs * severity_multiplier, 1)
 
-    # 5. Return structured dictionary
+    # 5. Financial Cost Engine: Unit costs ($0.50/L water, $3.50/pack food)
+    COST_PER_WATER_LITER = 0.50
+    COST_PER_FOOD_PACK = 3.50
+    total_estimated_budget_usd = round(
+        (total_water_liters * COST_PER_WATER_LITER) + (total_food_packs * COST_PER_FOOD_PACK), 2
+    )
+
+    # 6. Return structured dictionary
     return {
         "disaster_location": {
             "latitude": float(disaster_lat),
@@ -82,7 +98,8 @@ def analyze_disaster_impact(disaster_lat: float, disaster_lon: float, severity: 
         "affected_cities": affected_cities,
         "affected_population": total_affected_population,
         "total_water_liters": total_water_liters,
-        "total_food_packs": total_food_packs
+        "total_food_packs": total_food_packs,
+        "total_estimated_budget_usd": total_estimated_budget_usd
     }
 
 

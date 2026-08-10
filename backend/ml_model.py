@@ -138,6 +138,21 @@ async def train_rescue_model(db: AsyncSession) -> Dict[str, Any]:
     }
 
 
+_cached_model = None
+
+
+def get_rescue_model():
+    global _cached_model
+    if _cached_model is None:
+        if os.path.exists(MODEL_PATH):
+            try:
+                _cached_model = joblib.load(MODEL_PATH)
+            except Exception as e:
+                print(f"Warning loading model: {e}")
+                _cached_model = None
+    return _cached_model
+
+
 def predict_rescue_needs(severity: float, affected_people: int = 5000, lat: float = 17.3333, lon: float = 96.4833) -> Dict[str, Any]:
     """
     Loads rescue_logistics_model.joblib and predicts required water (L), food (packs),
@@ -146,7 +161,8 @@ def predict_rescue_needs(severity: float, affected_people: int = 5000, lat: floa
     from sklearn.ensemble import RandomForestRegressor
     from services.depot_service import find_nearest_depot
 
-    if not os.path.exists(MODEL_PATH):
+    model = get_rescue_model()
+    if model is None:
         # Fallback baseline model fitting if joblib file is not pre-generated
         np.random.seed(42)
         X_mock = pd.DataFrame({
@@ -163,8 +179,8 @@ def predict_rescue_needs(severity: float, affected_people: int = 5000, lat: floa
         model.fit(X_mock, y_mock)
         os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
         joblib.dump(model, MODEL_PATH)
-    else:
-        model = joblib.load(MODEL_PATH)
+        global _cached_model
+        _cached_model = model
 
     # Dynamic feature alignment with trained model
     if hasattr(model, "feature_names_in_"):

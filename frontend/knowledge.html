@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Knowledge Base - Rescura Sync Command Center</title>
+    <!-- Google Fonts: Inter & Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Global CSS Stylesheet -->
+    <link rel="stylesheet" href="style.css?v=20260810">
+</head>
+<body>
+    <!-- Fixed Global Navigation Bar -->
+    <nav class="global-navbar">
+        <a href="index.html" class="nav-brand">
+            <span class="nav-brand-icon">🛡️</span>
+            <span>RESCURA SYNC</span>
+        </a>
+        <div class="nav-links">
+            <a href="index.html" class="nav-link">🗺️ Live Map</a>
+            <a href="events.html" class="nav-link">⚠️ Disaster Events</a>
+            <a href="knowledge.html" class="nav-link active">📖 Knowledge Base</a>
+            <a href="about.html" class="nav-link">ℹ️ About Us</a>
+        </div>
+        <div class="nav-right-toolbar">
+            <button class="btn-nav-purple" id="btn-pdf-download" onclick="downloadActionPlanPDF(1)">
+                <span id="pdf-icon">📄</span> Action Plan PDF
+            </button>
+            <button class="btn-nav-blue" id="btn-sync-ai" onclick="syncData()">
+                <span id="sync-icon">⚡</span> Sync AI
+            </button>
+            <button class="btn-nav-teal" id="btn-refresh-logistics" onclick="refreshLogistics()">
+                <span id="refresh-icon">🔄</span> Refresh
+            </button>
+            <div class="nav-status-badge">
+                <span>LIVE TELEMETRY</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Page Content Container -->
+    <div class="page-wrapper">
+        <div class="page-header">
+            <div class="page-title-group">
+                <h1>📖 Logistical & Spatial AI Knowledge Base</h1>
+                <p>Comprehensive methodology documentation detailing international humanitarian standards, spatial formulas, machine learning models, and routing algorithms powering Rescura Sync.</p>
+            </div>
+        </div>
+
+        <!-- Grid of Knowledge Base Cards -->
+        <div class="content-grid">
+            <!-- Card 1: The Sphere Project Standards -->
+            <div class="glass-card">
+                <div class="glass-card-title">
+                    <span class="badge-tag emerald">Humanitarian Standard</span>
+                    <span>The Sphere Project Minimum Standards</span>
+                </div>
+                <div class="glass-card-body">
+                    <p>Rescura Sync aligns all automated supply calculations with international humanitarian standards established by <b>The Sphere Charter</b> for disaster relief operations:</p>
+                    <ul>
+                        <li><b>Water Requirements:</b> 15 Liters per person per day (covering drinking, personal hygiene, and basic food preparation).</li>
+                        <li><b>Food Allocation:</b> 2,100 kcal daily nutritional intake per person, packaged into 1.2 kg high-density emergency food packs.</li>
+                        <li><b>Vulnerability Multipliers:</b> Operations automatically apply a 1.25x scaling factor for severe crisis zones (Severity &ge; 7.0) to account for infrastructure damage and supply disruption.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Card 2: Haversine & Spatial Demographic Analysis -->
+            <div class="glass-card">
+                <div class="glass-card-title">
+                    <span class="badge-tag blue">Spatial Mathematics</span>
+                    <span>Haversine & 50km Sphere Engine</span>
+                </div>
+                <div class="glass-card-body">
+                    <p>Geographic proximity between supply depots and disaster epicenters is calculated using great-circle spherical distance via the <b>Haversine Formula</b>:</p>
+                    <p style="font-family: monospace; background: rgba(11, 15, 25, 0.8); padding: 12px; border-radius: 8px; font-size: 12px; color: var(--accent-neon-blue); border: 1px solid rgba(0, 240, 255, 0.2); margin: 10px 0;">
+                        d = 2r &middot; arcsin(&radic;(sin&sup2;(&Delta;&phi;/2) + cos(&phi;&thinsp;&sup1;)cos(&phi;&thinsp;&sup2;)sin&sup2;(&Delta;&lambda;/2)))
+                    </p>
+                    <p>Our 50km Sphere Engine draws a 50 km radial buffer around active epicenters to evaluate population density, road connectivity, and vulnerable civilian sectors.</p>
+                </div>
+            </div>
+
+            <!-- Card 3: Multi-Target RandomForest ML Model -->
+            <div class="glass-card">
+                <div class="glass-card-title">
+                    <span class="badge-tag purple">Machine Learning</span>
+                    <span>Multi-Target RandomForest AI Model</span>
+                </div>
+                <div class="glass-card-body">
+                    <p>To predict complex operational needs beyond linear formulas, Rescura Sync trains an ensemble <b>RandomForestRegressor</b> machine learning model on historical operation records:</p>
+                    <ul>
+                        <li><b>Input Features:</b> Severity Score (1-10), Estimated Population at Risk, Latitude, Longitude, and Proximity to Logistics Hubs.</li>
+                        <li><b>Predicted Targets:</b> Required Water Volume (Liters), Food Packs Required, and Estimated Operation Rescue Time (Hours).</li>
+                        <li><b>Model Weight Persistence:</b> Model weights are persisted in <code style="color: var(--accent-action-purple); font-weight: 700;">rescue_logistics_model.joblib</code> for fast inference under 50ms.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Card 4: OSMnx Evacuation Graph Routing -->
+            <div class="glass-card">
+                <div class="glass-card-title">
+                    <span class="badge-tag amber">Network GIS</span>
+                    <span>OSMnx Road Graph & Routing Engine</span>
+                </div>
+                <div class="glass-card-body">
+                    <p>Evacuation routes and convoy dispatch paths are generated dynamically by pulling real-world road networks from <b>OpenStreetMap</b> using <b>OSMnx</b>:</p>
+                    <ul>
+                        <li><b>Graph Processing:</b> Converts road segments into a directed graph with travel impedance based on speed limits and surface quality.</li>
+                        <li><b>Dijkstra Optimization:</b> Computes optimal dispatch routes from the nearest registered supply depot (Yangon Central, Mandalay Hub, Naypyidaw Reserve) to the disaster target.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Card 5: Realtime Telemetry Ingestion -->
+            <div class="glass-card">
+                <div class="glass-card-title">
+                    <span class="badge-tag red">Telemetry Ingestion</span>
+                    <span>GDACS RSS XML & Supabase WebSockets</span>
+                </div>
+                <div class="glass-card-body">
+                    <p>Live emergency events are ingested asynchronously from the <b>Global Disaster Alert and Coordination System (GDACS)</b>:</p>
+                    <ul>
+                        <li><b>5-Minute Ingestion Cache:</b> Fast in-memory caching prevents API rate limits while ensuring real-time emergency responsiveness under 100ms.</li>
+                        <li><b>Civilian SOS Signals:</b> Encrypted WebSocket distress feeds from mobile apps push live coordinates and emergency needs to command personnel.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Card 6: PDF Action Plan Generation -->
+            <div class="glass-card">
+                <div class="glass-card-title">
+                    <span class="badge-tag purple">PDF Engine</span>
+                    <span>fpdf2 Automated Action Plan Export</span>
+                </div>
+                <div class="glass-card-body">
+                    <p>Command commanders can generate C-level executive action plan reports with a single click:</p>
+                    <ul>
+                        <li><b>fpdf2 High-Precision Rendering:</b> Renders executive summaries, dispatch route telemetry, depot allocations, and emergency contact lists into PDF format.</li>
+                        <li><b>Instant Download:</b> Served directly from FastAPI backend endpoint <code>/api/export-report/{id}</code> as downloadable PDF documents.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_HOST = window.location.origin.replace(':5500', ':8000');
+        function downloadActionPlanPDF(evtId = 1) {
+            window.open(`${API_HOST}/api/export-report/${evtId}`, '_blank');
+        }
+        function syncData() {
+            window.location.href = 'index.html';
+        }
+        function refreshLogistics() {
+            window.location.reload();
+        }
+    </script>
+</body>
+</html>
