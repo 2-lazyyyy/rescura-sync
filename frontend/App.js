@@ -21,13 +21,13 @@ const openStreetMapLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
 });
 
-// Initialize Leaflet Map
-const BAGO_COORDS = [17.3333, 96.4833];
-const ZOOM_LEVEL = 13;
+// Initialize Leaflet Map centered on Myanmar Focus Zone
+const MYANMAR_COORDS = [19.7633, 96.0785];
+const MYANMAR_ZOOM_LEVEL = 6.5;
 
 const map = L.map('map', {
-    center: BAGO_COORDS,
-    zoom: ZOOM_LEVEL,
+    center: MYANMAR_COORDS,
+    zoom: MYANMAR_ZOOM_LEVEL,
     layers: [darkCanvasLayer],
     zoomControl: false
 });
@@ -38,6 +38,39 @@ const liveWeatherRadarLayer = L.tileLayer('https://tile.rainviewer.org/v2/radar/
     attribution: '&copy; <a href="https://www.rainviewer.com/">RainViewer</a> Weather Radar',
     opacity: 0.65
 });
+
+// Registered Relief Depots & Haversine Distance Helpers
+const REGISTERED_DEPOTS_CLIENT = [
+    { name: "Yangon Central Depot", lat: 16.8661, lon: 96.1561 },
+    { name: "Naypyidaw Reserve Depot", lat: 19.7633, lon: 96.0785 },
+    { name: "Mandalay Hub Depot", lat: 21.9588, lon: 96.0891 }
+];
+
+function calculateHaversineKm(lat1, lon1, lat2, lon2) {
+    const R = 6371.0;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+
+function getNearestDepotDistance(targetLat, targetLon) {
+    const lat = parseFloat(targetLat);
+    const lon = parseFloat(targetLon);
+    if (isNaN(lat) || isNaN(lon)) return 45.0;
+
+    let minDist = Infinity;
+    for (const d of REGISTERED_DEPOTS_CLIENT) {
+        const dist = calculateHaversineKm(lat, lon, d.lat, d.lon);
+        if (dist < minDist) {
+            minDist = dist;
+        }
+    }
+    return minDist === Infinity ? 45.0 : Math.round(minDist * 100) / 100;
+}
 
 // Add Layer Control widget allowing users to toggle Satellite vs Dark Canvas vs OSM vs Live Weather Overlay
 const baseMaps = {
@@ -496,7 +529,7 @@ function renderSidebarCards() {
             return;
         }
 
-        filtered.forEach(alert => {
+        filtered.forEach((alert, index) => {
             const lat = alert.latitude || alert.lat;
             const lon = alert.longitude || alert.lon;
             const timeStr = formatOccurredTime(alert.created_at || alert.pubDate || alert.timestamp);
@@ -504,16 +537,54 @@ function renderSidebarCards() {
             const waterVal = alert.water_needed_liters || Math.round((alert.affected_population || 5000) * 3);
             const foodVal = alert.food_needed_packs || Math.round((alert.affected_population || 5000) * 0.5);
             const estTimeVal = alert.ai_rescue_time_hrs || 178;
+
             const isASEAN = (lat >= -10 && lat <= 28 && lon >= 90 && lon <= 140);
             const zoneText = isASEAN ? "🟢 Inside ASEAN Dispatch Zone" : "🔵 Out of ASEAN Dispatch Zone";
 
+            const depotDist = (alert.nearest_depot && alert.nearest_depot.distance_km)
+                ? alert.nearest_depot.distance_km
+                : getNearestDepotDistance(lat, lon);
+            const eta = (alert.nearest_depot && alert.nearest_depot.eta_breakdown)
+                ? alert.nearest_depot.eta_breakdown
+                : calculateClientETABreakdown(depotDist, alert.severity, alert.title);
+
+            const recModePill = eta.recommended_mode === 'air'
+                ? `<span style="color: #facc15; font-weight: 700; font-size: 10px; background: rgba(245, 158, 11, 0.15); padding: 2px 5px; border-radius: 4px; border: 1px solid rgba(245, 158, 11, 0.3);">🚁 Air Rec.</span>`
+                : (eta.recommended_mode === 'water'
+                    ? `<span style="color: #facc15; font-weight: 700; font-size: 10px; background: rgba(245, 158, 11, 0.15); padding: 2px 5px; border-radius: 4px; border: 1px solid rgba(245, 158, 11, 0.3);">🚢 Water Rec.</span>`
+                    : `<span style="color: #38bdf8; font-weight: 700; font-size: 10px; background: rgba(56, 189, 248, 0.15); padding: 2px 5px; border-radius: 4px; border: 1px solid rgba(56, 189, 248, 0.3);">🚚 Land Rec.</span>`);
+
+            const disasterId = String(alert.id || alert.title || `gdacs_${index}`);
+            const lockInfo = lockedDisastersMap[disasterId];
+            const isLocked = !!lockInfo;
+            const isLockedByMe = isLocked && lockInfo.locked_by === dispatcherId;
+            const isLockedByOther = isLocked && !isLockedByMe;
+
+            let cardExtraClass = '';
+            let lockBadgeHtml = '';
+            let lockBtnText = '🔒 Lock';
+            let lockBtnDisabled = false;
+            let dispatchBtnDisabled = isLockedByOther;
+
+            if (isLockedByMe) {
+                cardExtraClass = ' locked-by-me';
+                lockBadgeHtml = `<span class="lock-badge locked-me">🔒 Locked by You</span>`;
+                lockBtnText = '🔓 Unlock';
+            } else if (isLockedByOther) {
+                cardExtraClass = ' locked-by-other';
+                lockBadgeHtml = `<span class="lock-badge locked-other">🔒 Locked by ${lockInfo.locked_by}</span>`;
+                lockBtnText = '🔒 Locked';
+                lockBtnDisabled = true;
+            }
+
             const card = document.createElement('div');
-            card.className = 'alert-card';
+            card.className = 'alert-card' + cardExtraClass;
+            card.setAttribute('data-disaster-id', disasterId);
             card.onclick = (e) => {
-                if (e.target.closest('.btn-card-pdf')) return;
-                focusMap(lat, lon);
-                selectAlert(lat, lon, alert.title, alert.severity, alert.created_at || alert.pubDate);
+                if (e.target.closest('.btn-card-pdf') || e.target.closest('.lock-status-bar')) return;
+                toggleSelectDisaster(lat, lon, alert.title, alert.severity, alert.created_at || alert.pubDate, alert.nearest_depot);
             };
+
             card.innerHTML = `
                 <div class="card-header">
                     <span class="card-type">⚡ ${alert.disaster_type || 'EMERGENCY'}</span>
@@ -529,9 +600,6 @@ function renderSidebarCards() {
                 </div>
                 <div class="card-metrics-block">
                     <div class="metric-row">
-                        <span style="color: #94a3b8; font-size: 10px;">${zoneText}</span>
-                    </div>
-                    <div class="metric-row">
                         <span style="color: #94a3b8;">💧 Water Needed:</span>
                         <span class="metric-text-water">${waterVal.toLocaleString()} L</span>
                     </div>
@@ -539,14 +607,34 @@ function renderSidebarCards() {
                         <span style="color: #94a3b8;">🍱 Food Needed:</span>
                         <span class="metric-text-food">${foodVal.toLocaleString()} Packs</span>
                     </div>
-                    <div class="metric-row">
-                        <span style="color: #94a3b8;">⏱️ AI Est. Rescue Time:</span>
-                        <span class="metric-text-time">${estTimeVal} hrs</span>
+                    <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.08);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                            <span style="color: #cbd5e1; font-size: 10px; font-weight: 700;">⏱️ DISPATCH ETAs:</span>
+                            ${recModePill}
+                        </div>
+                        <div style="display: flex; justify-content: space-between; gap: 4px; font-size: 10px;">
+                            <span style="background: rgba(15,23,42,0.7); padding: 2px 5px; border-radius: 4px; border: 1px solid ${eta.recommended_mode==='land'?'#f59e0b':'rgba(255,255,255,0.08)'}; color: #e2e8f0;">🚚 ${eta.modes.land.formatted_time}</span>
+                            <span style="background: rgba(15,23,42,0.7); padding: 2px 5px; border-radius: 4px; border: 1px solid ${eta.recommended_mode==='air'?'#f59e0b':'rgba(255,255,255,0.08)'}; color: #e2e8f0;">🚁 ${eta.modes.air.formatted_time}</span>
+                            <span style="background: rgba(15,23,42,0.7); padding: 2px 5px; border-radius: 4px; border: 1px solid ${eta.recommended_mode==='water'?'#f59e0b':'rgba(255,255,255,0.08)'}; color: #e2e8f0;">🚢 ${eta.modes.water.formatted_time}</span>
+                        </div>
                     </div>
                 </div>
-                <button class="btn-card-pdf" onclick="downloadActionPlanPDF(${alert.id || 1})">
-                    📄 Action Plan PDF
-                </button>
+                <div style="display: flex; justify-content: space-between; gap: 8px; margin-top: 8px;">
+                    <button class="btn-card-pdf" style="flex: 1;" onclick="downloadActionPlanPDF(${alert.id || 1})">
+                        📄 Action Plan PDF
+                    </button>
+                </div>
+                <div class="lock-status-bar" onclick="event.stopPropagation();">
+                    <div>${lockBadgeHtml}</div>
+                    <div style="display: flex; gap: 6px;">
+                        <button class="btn-lock-toggle" ${lockBtnDisabled ? 'disabled' : ''} onclick="toggleLockDisaster('${disasterId}')">
+                            ${lockBtnText}
+                        </button>
+                        <button class="btn-dispatch-ws" ${dispatchBtnDisabled ? 'disabled' : ''} onclick="dispatchSuppliesWS('${disasterId}')">
+                            🚀 Dispatch
+                        </button>
+                    </div>
+                </div>
             `;
             container.appendChild(card);
         });
@@ -578,9 +666,36 @@ function renderSidebarCards() {
             const sosTimeStr = formatOccurredTime(alert.created_at || alert.timestamp);
             const cont = getContinent(lat, lon, alert.location);
 
+            const disasterId = String(alert.id || `sos_${index}`);
+            const lockInfo = lockedDisastersMap[disasterId];
+            const isLocked = !!lockInfo;
+            const isLockedByMe = isLocked && lockInfo.locked_by === dispatcherId;
+            const isLockedByOther = isLocked && !isLockedByMe;
+
+            let cardExtraClass = '';
+            let lockBadgeHtml = '';
+            let lockBtnText = '🔒 Lock';
+            let lockBtnDisabled = false;
+            let dispatchBtnDisabled = isLockedByOther || status === 'dispatched';
+
+            if (isLockedByMe) {
+                cardExtraClass = ' locked-by-me';
+                lockBadgeHtml = `<span class="lock-badge locked-me">🔒 Locked by You</span>`;
+                lockBtnText = '🔓 Unlock';
+            } else if (isLockedByOther) {
+                cardExtraClass = ' locked-by-other';
+                lockBadgeHtml = `<span class="lock-badge locked-other">🔒 Locked by ${lockInfo.locked_by}</span>`;
+                lockBtnText = '🔒 Locked';
+                lockBtnDisabled = true;
+            }
+
             const card = document.createElement('div');
-            card.className = 'alert-card';
-            card.onclick = () => focusMap(lat, lon);
+            card.className = 'alert-card' + cardExtraClass;
+            card.setAttribute('data-disaster-id', disasterId);
+            card.onclick = (e) => {
+                if (e.target.closest('.lock-status-bar')) return;
+                focusMap(lat, lon);
+            };
             card.innerHTML = `
                 <div class="card-header">
                     <span class="card-type" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3);">🚨 SOS SIGNAL</span>
@@ -595,6 +710,17 @@ function renderSidebarCards() {
                     <span class="meta-pill">Need: <b>${urgentNeed}</b></span>
                     <span class="meta-pill">Affected: <b>${affectedCount}</b></span>
                 </div>
+                <div class="lock-status-bar" onclick="event.stopPropagation();">
+                    <div>${lockBadgeHtml}</div>
+                    <div style="display: flex; gap: 6px;">
+                        <button class="btn-lock-toggle" ${lockBtnDisabled ? 'disabled' : ''} onclick="toggleLockDisaster('${disasterId}')">
+                            ${lockBtnText}
+                        </button>
+                        <button class="btn-dispatch-ws" ${dispatchBtnDisabled ? 'disabled' : ''} onclick="dispatchSuppliesWS('${disasterId}')">
+                            🚀 Dispatch
+                        </button>
+                    </div>
+                </div>
             `;
             container.appendChild(card);
         });
@@ -603,11 +729,96 @@ function renderSidebarCards() {
     updateStatsCounters();
 }
 
+let currentlySelectedDisasterKey = null;
+let currentlyActiveRouteLine = null;
+
+function findNearestDepotClientObject(targetLat, targetLon) {
+    const lat = parseFloat(targetLat);
+    const lon = parseFloat(targetLon);
+    let nearest = REGISTERED_DEPOTS_CLIENT[0];
+    let minDist = Infinity;
+    for (const d of REGISTERED_DEPOTS_CLIENT) {
+        const dist = calculateHaversineKm(lat, lon, d.lat, d.lon);
+        if (dist < minDist) {
+            minDist = dist;
+            nearest = d;
+        }
+    }
+    return nearest;
+}
+
+/**
+ * Toggles selection of a disaster event.
+ * Re-clicking/double-clicking unselects the event and removes its route line.
+ * Route lines are STRICTLY restricted to events within ASEAN bounds.
+ */
+function toggleSelectDisaster(lat, lon, title, severity, created_at = null, depotObj = null) {
+    const targetLat = parseFloat(lat);
+    const targetLon = parseFloat(lon);
+    if (isNaN(targetLat) || isNaN(targetLon)) return;
+
+    const disasterKey = `${targetLat.toFixed(3)}_${targetLon.toFixed(3)}`;
+
+    // Re-click / Double-click on SAME disaster -> UNSELECT & REMOVE ROUTE LINE
+    if (currentlySelectedDisasterKey === disasterKey) {
+        if (currentlyActiveRouteLine) {
+            map.removeLayer(currentlyActiveRouteLine);
+            currentlyActiveRouteLine = null;
+        }
+        if (activePolyline) {
+            map.removeLayer(activePolyline);
+            activePolyline = null;
+        }
+        currentlySelectedDisasterKey = null;
+        if (activeMarker) {
+            map.closePopup();
+        }
+        console.log('⚡ Disaster unselected. Route line removed.');
+        return;
+    }
+
+    // Clear previous route line if any
+    if (currentlyActiveRouteLine) {
+        map.removeLayer(currentlyActiveRouteLine);
+        currentlyActiveRouteLine = null;
+    }
+    if (activePolyline) {
+        map.removeLayer(activePolyline);
+        activePolyline = null;
+    }
+
+    currentlySelectedDisasterKey = disasterKey;
+
+    let depotLat = null;
+    let depotLon = null;
+
+    if (depotObj && (depotObj.latitude || depotObj.lat)) {
+        depotLat = depotObj.latitude || depotObj.lat;
+        depotLon = depotObj.longitude || depotObj.lon;
+    } else {
+        const nearestDepotInfo = findNearestDepotClientObject(targetLat, targetLon);
+        depotLat = nearestDepotInfo.lat;
+        depotLon = nearestDepotInfo.lon;
+    }
+
+    if (depotLat && depotLon) {
+        currentlyActiveRouteLine = L.polyline([[depotLat, depotLon], [targetLat, targetLon]], {
+            color: '#10b981',
+            weight: 5,
+            opacity: 0.9,
+            dashArray: '10, 10'
+        }).addTo(map);
+    }
+
+    focusMap(targetLat, targetLon);
+    fetchReliefData(targetLat, targetLon, severity, title, created_at);
+}
+
 /**
  * Handle user click on a disaster alert card from sidebar
  */
-function selectAlert(lat, lon, title, severity, created_at = null) {
-    fetchReliefData(lat, lon, severity, title, created_at);
+function selectAlert(lat, lon, title, severity, created_at = null, depotObj = null) {
+    toggleSelectDisaster(lat, lon, title, severity, created_at, depotObj);
 }
 
 /**
@@ -634,9 +845,13 @@ async function fetchReliefData(lat = 17.3333, lon = 96.4833, severity = 7.5, tit
             estRescueTime = existingEvt.estimated_rescue_time || 4.5;
             timeStr = formatOccurredTime(eventCreatedAt || existingEvt.created_at || existingEvt.pubDate);
 
-            if (existingEvt.nearest_depot && existingEvt.nearest_depot.name && isWithinASEAN(lat, lon)) {
+            if (existingEvt.nearest_depot && existingEvt.nearest_depot.name) {
                 depotNameText = existingEvt.nearest_depot.name;
                 distanceKm = existingEvt.nearest_depot.distance_km || 0;
+            } else {
+                const nearestInfo = findNearestDepotClientObject(lat, lon);
+                depotNameText = nearestInfo.name;
+                distanceKm = getNearestDepotDistance(lat, lon);
             }
         }
 
@@ -654,26 +869,40 @@ async function fetchReliefData(lat = 17.3333, lon = 96.4833, severity = 7.5, tit
                 foodPacks = Math.round(aiPrediction.food_packs || 0);
                 estRescueTime = aiPrediction.estimated_rescue_time || 4.5;
                 timeStr = formatOccurredTime(eventCreatedAt || data.created_at);
-                if (data.nearest_depot && data.nearest_depot.name && isWithinASEAN(lat, lon)) {
+                if (data.nearest_depot && data.nearest_depot.name) {
                     depotNameText = data.nearest_depot.name;
                     distanceKm = data.nearest_depot.distance_km || 0;
+                } else {
+                    const nearestInfo = findNearestDepotClientObject(lat, lon);
+                    depotNameText = nearestInfo.name;
+                    distanceKm = getNearestDepotDistance(lat, lon);
                 }
             }
         }
 
         const cont = getContinent(lat, lon, title);
-        const depotBadge = (depotNameText && isWithinASEAN(lat, lon))
+        const depotBadge = depotNameText
             ? `<div style="font-size: 12px; color: #22c55e; font-weight: 700; margin-bottom: 4px;">🛡️ Assigned Depot: ${depotNameText} (${distanceKm} km)</div>`
-            : `<div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px;">🌐 Out of ASEAN Dispatch Zone</div>`;
+            : `<div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px;">🛡️ Assigned Depot: Yangon Central Hub</div>`;
 
         const estBudgetUsd = (existingEvt && existingEvt.total_estimated_budget_usd)
             ? existingEvt.total_estimated_budget_usd
             : Math.round((waterLiters * 0.50) + (foodPacks * 3.50));
 
-        const evtId = existingEvt ? existingEvt.id : 1;
+        const etaInfo = calculateClientETABreakdown(distanceKm, severity, title);
+        const etaRowHtml = `
+            <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255, 255, 255, 0.1); font-size: 11px;">
+                <div style="font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">⏱️ Multi-Modal Dispatch ETAs:</div>
+                <div style="display: flex; justify-content: space-between; gap: 4px; font-size: 10px;">
+                    <span style="background: rgba(15,23,42,0.6); padding: 3px 6px; border-radius: 4px; border: 1px solid ${etaInfo.recommended_mode==='land'?'#f59e0b':'rgba(255,255,255,0.1)'}; color: ${etaInfo.recommended_mode==='land'?'#fef08a':'#e2e8f0'};">🚚 <b>Land:</b> ${etaInfo.modes.land.formatted_time}</span>
+                    <span style="background: rgba(15,23,42,0.6); padding: 3px 6px; border-radius: 4px; border: 1px solid ${etaInfo.recommended_mode==='air'?'#f59e0b':'rgba(255,255,255,0.1)'}; color: ${etaInfo.recommended_mode==='air'?'#fef08a':'#e2e8f0'};">🚁 <b>Air:</b> ${etaInfo.modes.air.formatted_time}</span>
+                    <span style="background: rgba(15,23,42,0.6); padding: 3px 6px; border-radius: 4px; border: 1px solid ${etaInfo.recommended_mode==='water'?'#f59e0b':'rgba(255,255,255,0.1)'}; color: ${etaInfo.recommended_mode==='water'?'#fef08a':'#e2e8f0'};">🚢 <b>Water:</b> ${etaInfo.modes.water.formatted_time}</span>
+                </div>
+            </div>
+        `;
 
         const popupContent = `
-            <div style="font-family: Inter, sans-serif; min-width: 220px; color: #f8fafc;">
+            <div style="font-family: Inter, sans-serif; min-width: 230px; color: #f8fafc;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                     <span style="font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 10px; background: rgba(239, 68, 68, 0.25); color: #f87171; text-transform: uppercase;">
                         🌏 ${cont} &bull; EMERGENCY
@@ -690,7 +919,8 @@ async function fetchReliefData(lat = 17.3333, lon = 96.4833, severity = 7.5, tit
                     <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 3px;">💧 <b>Water Needed:</b> <span style="color: #38bdf8; font-weight: 700;">${waterLiters.toLocaleString()} L</span></div>
                     <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 3px;">🍱 <b>Food Needed:</b> <span style="color: #fbbf24; font-weight: 700;">${foodPacks.toLocaleString()} packs</span></div>
                     <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 3px;">💵 <b>Est. Budget:</b> <span style="color: #4ade80; font-weight: 800;">$${Math.round(estBudgetUsd).toLocaleString()} USD</span></div>
-                    <div style="font-size: 12px; color: #cbd5e1;">⏱️ <b>AI Est. Rescue Time:</b> <span style="color: #a855f7; font-weight: 700;">${estRescueTime} hours</span></div>
+                    <div style="font-size: 12px; color: #cbd5e1;">⏱️ <b>Est. Ops Duration:</b> <span style="color: #a855f7; font-weight: 700;">${estRescueTime} hours</span></div>
+                    ${etaRowHtml}
                 </div>
                 <button onclick="downloadActionPlanPDF(${evtId})" style="display: block; width: 100%; margin-bottom: 8px; text-align: center; background: linear-gradient(135deg, #0ea5e9, #2563eb); color: #ffffff; border: none; padding: 7px 12px; border-radius: 8px; font-weight: 700; font-size: 12px; cursor: pointer; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);">
                     📄 Download Action Plan (PDF)
@@ -702,38 +932,36 @@ async function fetchReliefData(lat = 17.3333, lon = 96.4833, severity = 7.5, tit
             </div>
         `;
 
-        if (activeMarker) {
-            map.removeLayer(activeMarker);
+        let matchMarker = mapMarkers.find(m =>
+            Math.abs(m.getLatLng().lat - lat) < 0.005 && Math.abs(m.getLatLng().lng - lon) < 0.005
+        );
+
+        if (matchMarker) {
+            matchMarker.setPopupContent(popupContent).openPopup();
+        } else {
+            if (activeMarker) {
+                map.removeLayer(activeMarker);
+            }
+
+            const disasterIcon = L.divIcon({
+                className: 'disaster-div-icon',
+                html: '⚠️',
+                iconSize: [32, 32],
+                iconAnchor: [16, 16]
+            });
+
+            activeMarker = L.marker([lat, lon], { icon: disasterIcon })
+                .addTo(map)
+                .bindPopup(popupContent)
+                .openPopup();
         }
-
-        const disasterIcon = L.divIcon({
-            className: 'disaster-div-icon',
-            html: '⚠️',
-            iconSize: [32, 32],
-            iconAnchor: [16, 16]
-        });
-
-        activeMarker = L.marker([lat, lon], { icon: disasterIcon })
-            .addTo(map)
-            .bindPopup(popupContent)
-            .openPopup();
 
         if (activePolyline) {
             map.removeLayer(activePolyline);
+            activePolyline = null;
         }
 
-        const optimalRouteCoords = gisAnalysis.optimal_route_coords;
-        if (optimalRouteCoords && optimalRouteCoords.length > 0 && isWithinASEAN(lat, lon)) {
-            activePolyline = L.polyline(optimalRouteCoords, {
-                color: '#ef4444',
-                weight: 5,
-                opacity: 0.8
-            }).addTo(map);
-
-            map.fitBounds(activePolyline.getBounds(), { padding: [40, 40] });
-        } else {
-            map.flyTo([lat, lon], 10, { animate: true, duration: 1.2 });
-        }
+        map.flyTo([lat, lon], 10, { animate: true, duration: 1.2 });
 
     } catch (error) {
         console.error('Error fetching relief data from backend:', error);
@@ -823,26 +1051,26 @@ async function loadSOSAlerts() {
             });
 
             const marker = L.marker([lat, lon], { icon: pulseIcon }).addTo(map);
+            marker.on('click', () => {
+                toggleSelectDisaster(lat, lon, alert.location || 'Civilian SOS Sector', 5.0, alert.created_at || alert.timestamp, depotData ? depotData.nearest_depot : null);
+            });
             marker.continent = cont;
             marker.alertLocation = alert.location || 'Civilian Sector';
 
             const alertId = alert.id || index;
 
+            let distanceKm = 45.0;
             let depotInfoText = 'Calculating Nearest Depot...';
             const depotData = sosDepotResults[index];
 
             if (depotData && depotData.status === 'success' && depotData.nearest_depot) {
                 const depot = depotData.nearest_depot;
+                distanceKm = depot.distance_km || 45.0;
                 depotInfoText = `🛡️ <b>Nearest Depot:</b> ${depot.name} (${depot.distance_km} km)`;
-
-                const sosRouteLine = L.polyline([[depot.latitude, depot.longitude], [lat, lon]], {
-                    color: '#10b981',
-                    weight: 4,
-                    opacity: 0.85,
-                    dashArray: '8, 8'
-                }).addTo(map);
-
-                routePolylines.push(sosRouteLine);
+            } else {
+                distanceKm = getNearestDepotDistance(lat, lon);
+                const depotInfo = findNearestDepotClientObject(lat, lon);
+                depotInfoText = `🛡️ <b>Nearest Depot:</b> ${depotInfo.name} (${distanceKm} km)`;
             }
 
             marker.bindPopup(`
@@ -859,7 +1087,18 @@ async function loadSOSAlerts() {
                     <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 3px;"><b>Urgent Need:</b> ${urgentNeed}</div>
                     <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 3px;"><b>People Affected:</b> ${affectedPeople}</div>
                     <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 3px;">${depotInfoText}</div>
-                    <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 8px;"><b>⏱️ AI Est. Rescue Time:</b> <span style="color: #a855f7; font-weight: 700;">${estRescueTime} hours</span></div>
+                    ${(() => {
+                        const eta = calculateClientETABreakdown(distanceKm, 5.0, alert.urgent_need || 'SOS Emergency');
+                        return `
+                        <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.1); margin-bottom: 8px;">
+                            <div style="font-size: 11px; font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">⏱️ Multi-Modal Dispatch ETAs:</div>
+                            <div style="display: flex; justify-content: space-between; gap: 4px; font-size: 10px;">
+                                <span style="background: rgba(15,23,42,0.6); padding: 3px 6px; border-radius: 4px; border: 1px solid ${eta.recommended_mode==='land'?'#f59e0b':'rgba(255,255,255,0.1)'}; color: #e2e8f0;">🚚 <b>Land:</b> ${eta.modes.land.formatted_time}</span>
+                                <span style="background: rgba(15,23,42,0.6); padding: 3px 6px; border-radius: 4px; border: 1px solid ${eta.recommended_mode==='air'?'#f59e0b':'rgba(255,255,255,0.1)'}; color: #e2e8f0;">🚁 <b>Air:</b> ${eta.modes.air.formatted_time}</span>
+                                <span style="background: rgba(15,23,42,0.6); padding: 3px 6px; border-radius: 4px; border: 1px solid ${eta.recommended_mode==='water'?'#f59e0b':'rgba(255,255,255,0.1)'}; color: #e2e8f0;">🚢 <b>Water:</b> ${eta.modes.water.formatted_time}</span>
+                            </div>
+                        </div>`;
+                    })()}
                     <div style="display: flex; flex-direction: column; gap: 4px;">
                         ${status !== 'dispatched' ? `<button class="btn-dispatch-action btn-dispatch" onclick="updateSOSStatus('${alertId}', 'dispatched')">Dispatch Team</button>` : ''}
                         ${status !== 'resolved' ? `<button class="btn-dispatch-action btn-resolve" onclick="updateSOSStatus('${alertId}', 'resolved')">Mark Resolved</button>` : ''}
@@ -951,6 +1190,7 @@ async function loadAllDepots() {
  */
 async function initializeDashboard() {
     try {
+        initDispatchWebSocket();
         await loadAnalytics();
         await loadAllDepots();
 
@@ -974,9 +1214,12 @@ async function initializeDashboard() {
 
         for (let idx = 0; idx < events.length; idx++) {
             const event = events[idx];
-            const lat = event.latitude;
-            const lon = event.longitude;
-            const title = event.title;
+            const lat = parseFloat(event.latitude !== undefined ? event.latitude : (event.lat !== undefined ? event.lat : 0));
+            const lon = parseFloat(event.longitude !== undefined ? event.longitude : (event.lon !== undefined ? event.lon : 0));
+
+            if (isNaN(lat) || isNaN(lon) || (lat === 0 && lon === 0)) continue;
+
+            const title = event.title || 'Disaster Event';
             const latestPred = event.latest_prediction;
             const estRescueTime = event.estimated_rescue_time || 4.5;
             const timeStr = formatOccurredTime(event.created_at || event.pubDate || event.timestamp);
@@ -996,26 +1239,36 @@ async function initializeDashboard() {
                 ? event.nearest_depot
                 : null;
 
-            if (nearestDepotObj && nearestDepotObj.name && isWithinASEAN(lat, lon)) {
+            if (nearestDepotObj && nearestDepotObj.name) {
                 depotNameText = nearestDepotObj.name;
                 distanceKm = nearestDepotObj.distance_km || 0;
-
-                const routeLine = L.polyline([[nearestDepotObj.latitude, nearestDepotObj.longitude], [lat, lon]], {
-                    color: '#10b981',
-                    weight: 4,
-                    opacity: 0.85,
-                    dashArray: '10, 10'
-                }).addTo(map);
-
-                routePolylines.push(routeLine);
+            } else {
+                const nearestInfo = findNearestDepotClientObject(lat, lon);
+                depotNameText = nearestInfo.name;
+                distanceKm = getNearestDepotDistance(lat, lon);
             }
 
-            const depotBadge = (depotNameText && isWithinASEAN(lat, lon))
+            const depotBadge = depotNameText
                 ? `<div style="font-size: 12px; color: #22c55e; font-weight: 700; margin-bottom: 4px;">🛡️ Assigned Depot: ${depotNameText} (${distanceKm} km)</div>`
-                : `<div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px;">🌐 Out of ASEAN Dispatch Zone</div>`;
+                : `<div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px;">🛡️ Assigned Depot: Yangon Central Hub</div>`;
+
+            const etaInfo = (event.nearest_depot && event.nearest_depot.eta_breakdown)
+                ? event.nearest_depot.eta_breakdown
+                : calculateClientETABreakdown(distanceKm, event.severity, title);
+
+            const etaRowHtml = `
+                <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255, 255, 255, 0.1); font-size: 11px;">
+                    <div style="font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">⏱️ Multi-Modal Dispatch ETAs:</div>
+                    <div style="display: flex; justify-content: space-between; gap: 4px; font-size: 10px;">
+                        <span style="background: rgba(15,23,42,0.6); padding: 3px 6px; border-radius: 4px; border: 1px solid ${etaInfo.recommended_mode==='land'?'#f59e0b':'rgba(255,255,255,0.1)'}; color: ${etaInfo.recommended_mode==='land'?'#fef08a':'#e2e8f0'};">🚚 <b>Land:</b> ${etaInfo.modes.land.formatted_time}</span>
+                        <span style="background: rgba(15,23,42,0.6); padding: 3px 6px; border-radius: 4px; border: 1px solid ${etaInfo.recommended_mode==='air'?'#f59e0b':'rgba(255,255,255,0.1)'}; color: ${etaInfo.recommended_mode==='air'?'#fef08a':'#e2e8f0'};">🚁 <b>Air:</b> ${etaInfo.modes.air.formatted_time}</span>
+                        <span style="background: rgba(15,23,42,0.6); padding: 3px 6px; border-radius: 4px; border: 1px solid ${etaInfo.recommended_mode==='water'?'#f59e0b':'rgba(255,255,255,0.1)'}; color: ${etaInfo.recommended_mode==='water'?'#fef08a':'#e2e8f0'};">🚢 <b>Water:</b> ${etaInfo.modes.water.formatted_time}</span>
+                    </div>
+                </div>
+            `;
 
             const popupContent = `
-                <div style="font-family: Inter, sans-serif; min-width: 220px; color: #f8fafc;">
+                <div style="font-family: Inter, sans-serif; min-width: 230px; color: #f8fafc;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                         <span style="font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 10px; background: rgba(239, 68, 68, 0.25); color: #f87171; text-transform: uppercase;">
                             🌏 ${cont} &bull; EMERGENCY
@@ -1031,7 +1284,8 @@ async function initializeDashboard() {
                     <div style="background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 8px 10px; margin-bottom: 8px;">
                         <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 3px;">💧 <b>Water Needed:</b> <span style="color: #38bdf8; font-weight: 700;">${waterText}</span></div>
                         <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 3px;">🍱 <b>Food Needed:</b> <span style="color: #fbbf24; font-weight: 700;">${foodText}</span></div>
-                        <div style="font-size: 12px; color: #cbd5e1;">⏱️ <b>AI Est. Rescue Time:</b> <span style="color: #a855f7; font-weight: 700;">${estRescueTime} hours</span></div>
+                        <div style="font-size: 12px; color: #cbd5e1;">⏱️ <b>Est. Ops Duration:</b> <span style="color: #a855f7; font-weight: 700;">${estRescueTime} hours</span></div>
+                        ${etaRowHtml}
                     </div>
                     <div style="font-size: 11px; color: #94a3b8; display: flex; justify-content: space-between;">
                         <span>📍 ${lat.toFixed(3)}, ${lon.toFixed(3)}</span>
@@ -1051,17 +1305,18 @@ async function initializeDashboard() {
                 .addTo(map)
                 .bindPopup(popupContent);
 
+            marker.on('click', (e) => {
+                toggleSelectDisaster(lat, lon, title, event.severity, event.created_at, nearestDepotObj);
+            });
+
             marker.continent = cont;
             marker.disasterTitle = title;
-
-            if (idx === 0) {
-                marker.openPopup();
-            }
 
             mapMarkers.push(marker);
         }
 
         renderSidebarCards();
+        updateMapMarkersFilter();
         await loadSOSAlerts();
         initRealtimeListener();
         initSSEStream();
@@ -1202,16 +1457,54 @@ function markEmergencyProcessed(eventId) {
     }
 }
 
+function calculateClientETABreakdown(distKm, severity, title) {
+    const d = Math.max(0.1, parseFloat(distKm) || 0);
+    const sev = parseFloat(severity) || 5.0;
+    const titleLower = (title || '').toLowerCase();
+
+    const landTotal = (d * 1.3 / 50.0) + 0.5;
+    const landH = Math.floor(landTotal);
+    const landM = Math.round((landTotal - landH) * 60);
+
+    const airTotal = (d * 1.05 / 220.0) + 0.3;
+    const airH = Math.floor(airTotal);
+    const airM = Math.round((airTotal - airH) * 60);
+
+    const waterTotal = (d * 1.4 / 25.0) + 0.6;
+    const waterH = Math.floor(waterTotal);
+    const waterM = Math.round((waterTotal - waterH) * 60);
+
+    const isWater = ['flood', 'tsunami', 'cyclone', 'storm', 'river', 'sea', 'coastal', 'drowning'].some(k => titleLower.includes(k));
+    let recMode = 'land';
+    let rationale = '';
+
+    if (isWater && d <= 80) {
+        recMode = 'water';
+        rationale = `🚢 WATER/BOAT RECOMMENDED: Water/flood disaster detected within ${d.toFixed(1)}km. Rescue boat deployment is optimal for flooded/coastal terrain.`;
+    } else if (sev >= 7.0 || d >= 120) {
+        recMode = 'air';
+        rationale = `🚁 AIR HELICOPTER RECOMMENDED: High severity (${sev}/10) or long distance (${d.toFixed(1)}km). Air flight bypasses ground road blockages in ${airH}h ${airM}m.`;
+    } else {
+        recMode = 'land';
+        rationale = `🚚 LAND CONVOY RECOMMENDED: Standard emergency ground road deployment for ${d.toFixed(1)}km distance (${landH}h ${landM}m).`;
+    }
+
+    return {
+        recommended_mode: recMode,
+        recommendation_rationale: rationale,
+        modes: {
+            land: { formatted_time: `${landH}h ${landM}m` },
+            air: { formatted_time: `${airH}h ${airM}m` },
+            water: { formatted_time: `${waterH}h ${waterM}m` }
+        }
+    };
+}
+
 /**
  * Populates and displays the high-priority emergency modal popup for events in Myanmar & ASEAN
  */
 function displayEmergencyModal(payload) {
     if (!payload || !payload.latitude || !payload.longitude) return;
-
-    if (!isWithinASEAN(payload.latitude, payload.longitude)) {
-        console.log('Skipping emergency popup modal for non-ASEAN event:', payload.title);
-        return;
-    }
 
     const processedIds = getProcessedEmergencyIds();
     if (payload.id && processedIds.includes(payload.id)) {
@@ -1237,10 +1530,39 @@ function displayEmergencyModal(payload) {
         if (elWater) elWater.innerText = `${(payload.total_water_liters || 0).toLocaleString()} L`;
         if (elFood) elFood.innerText = `${(payload.total_food_packs || 0).toLocaleString()} Packs`;
         
+        let depotDist = 0;
         if (elDepot) {
             const depotName = payload.nearest_depot ? payload.nearest_depot.name : 'Nearest Supply Depot';
-            const depotDist = payload.nearest_depot ? payload.nearest_depot.distance_km : 0;
+            depotDist = payload.nearest_depot ? payload.nearest_depot.distance_km : 0;
             elDepot.innerText = `${depotName} (${depotDist} km)`;
+        }
+
+        // Multi-Modal ETA Breakdown Population
+        const etaBreakdown = (payload.nearest_depot && payload.nearest_depot.eta_breakdown)
+            ? payload.nearest_depot.eta_breakdown
+            : calculateClientETABreakdown(depotDist, payload.severity, payload.title);
+
+        const elValLand = document.getElementById('eta-val-land');
+        const elValAir = document.getElementById('eta-val-air');
+        const elValWater = document.getElementById('eta-val-water');
+        const elRationale = document.getElementById('modal-eta-rationale');
+
+        const cardLand = document.getElementById('eta-card-land');
+        const cardAir = document.getElementById('eta-card-air');
+        const cardWater = document.getElementById('eta-card-water');
+
+        if (elValLand) elValLand.innerText = etaBreakdown.modes.land.formatted_time;
+        if (elValAir) elValAir.innerText = etaBreakdown.modes.air.formatted_time;
+        if (elValWater) elValWater.innerText = etaBreakdown.modes.water.formatted_time;
+
+        [cardLand, cardAir, cardWater].forEach(c => c && c.classList.remove('recommended-mode'));
+        if (etaBreakdown.recommended_mode === 'land' && cardLand) cardLand.classList.add('recommended-mode');
+        if (etaBreakdown.recommended_mode === 'air' && cardAir) cardAir.classList.add('recommended-mode');
+        if (etaBreakdown.recommended_mode === 'water' && cardWater) cardWater.classList.add('recommended-mode');
+
+        if (elRationale) {
+            elRationale.innerText = etaBreakdown.recommendation_rationale || '';
+            elRationale.style.display = etaBreakdown.recommendation_rationale ? 'block' : 'none';
         }
 
         modal.classList.remove('hidden');
@@ -1282,26 +1604,145 @@ function acknowledgeAndRoute() {
     const severity = currentEmergencyPayload.severity;
     const depot = currentEmergencyPayload.nearest_depot;
 
-    map.setView([lat, lon], 12);
-
-    if (isWithinASEAN(lat, lon) && depot && depot.latitude && depot.longitude) {
-        const routeLine = L.polyline([[depot.latitude, depot.longitude], [lat, lon]], {
-            color: '#10b981',
-            weight: 5,
-            opacity: 0.9,
-            dashArray: '10, 10'
-        }).addTo(map);
-
-        routePolylines.push(routeLine);
-    }
-
-    fetchReliefData(lat, lon, severity, title);
+    toggleSelectDisaster(lat, lon, title, severity, null, depot);
 }
 
 window.syncData = syncData;
 window.refreshLogistics = refreshLogistics;
 window.closeEmergencyModal = closeEmergencyModal;
 window.acknowledgeAndRoute = acknowledgeAndRoute;
+
+// ==========================================================================
+// Collaborative Real-Time Dispatch via WebSockets
+// ==========================================================================
+let dispatcherId = localStorage.getItem('rescura_dispatcher_id');
+if (!dispatcherId) {
+    dispatcherId = 'Dispatcher_' + Math.floor(1000 + Math.random() * 9000);
+    localStorage.setItem('rescura_dispatcher_id', dispatcherId);
+}
+
+let lockedDisastersMap = {};
+let dispatchSocket = null;
+
+function updateDispatcherIdDisplay() {
+    const el = document.getElementById('dispatcher-id-display');
+    if (el) {
+        el.innerText = `👤 ${dispatcherId}`;
+        el.title = `Your active Dispatcher Session ID: ${dispatcherId}`;
+    }
+}
+
+function initDispatchWebSocket() {
+    updateDispatcherIdDisplay();
+    if (dispatchSocket && (dispatchSocket.readyState === WebSocket.OPEN || dispatchSocket.readyState === WebSocket.CONNECTING)) {
+        return;
+    }
+
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsHost = window.location.host || 'localhost:8000';
+    const wsUrl = (wsHost.includes('3000') || wsHost.includes('5500') || wsHost.includes('127.0.0.1'))
+        ? 'ws://localhost:8000/ws/dispatch'
+        : `${wsProtocol}//${wsHost}/ws/dispatch`;
+
+    try {
+        dispatchSocket = new WebSocket(wsUrl);
+
+        dispatchSocket.onopen = () => {
+            console.log('⚡ Collaborative Dispatch WebSocket Connected as', dispatcherId);
+            updateDispatcherIdDisplay();
+        };
+
+        dispatchSocket.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                handleWebSocketMessage(data);
+            } catch (e) {
+                console.error('Error parsing WS message:', e);
+            }
+        };
+
+        dispatchSocket.onclose = () => {
+            console.warn('WebSocket connection closed. Reconnecting in 4s...');
+            setTimeout(initDispatchWebSocket, 4000);
+        };
+
+        dispatchSocket.onerror = (err) => {
+            console.error('WebSocket Error:', err);
+        };
+    } catch (err) {
+        console.error('Failed to initialize WebSocket:', err);
+    }
+}
+
+function handleWebSocketMessage(data) {
+    if (!data || !data.type) return;
+
+    if (data.type === 'INIT_LOCKS') {
+        lockedDisastersMap = data.locked_disasters || {};
+        renderSidebarCards();
+    } else if (data.type === 'DISASTER_LOCKED') {
+        lockedDisastersMap[String(data.disaster_id)] = {
+            locked_by: data.locked_by,
+            timestamp: data.timestamp
+        };
+        renderSidebarCards();
+    } else if (data.type === 'DISASTER_UNLOCKED') {
+        delete lockedDisastersMap[String(data.disaster_id)];
+        renderSidebarCards();
+    } else if (data.type === 'DISASTER_DISPATCHED') {
+        delete lockedDisastersMap[String(data.disaster_id)];
+        const sosItem = sosAlertsData.find(a => String(a.id) === String(data.disaster_id));
+        if (sosItem) {
+            sosItem.status = 'dispatched';
+        }
+        renderSidebarCards();
+        updateStatsCounters();
+    }
+}
+
+function toggleLockDisaster(disasterId) {
+    if (!dispatchSocket || dispatchSocket.readyState !== WebSocket.OPEN) {
+        alert('Collaborative Dispatch WebSocket is connecting... Please retry in a moment.');
+        return;
+    }
+    const dIdStr = String(disasterId);
+    const isLocked = !!lockedDisastersMap[dIdStr];
+    const lockInfo = isLocked ? lockedDisastersMap[dIdStr] : null;
+
+    if (isLocked && lockInfo.locked_by !== dispatcherId) {
+        alert(`This disaster is currently locked by ${lockInfo.locked_by}. Only they can unlock it.`);
+        return;
+    }
+
+    const action = isLocked ? 'unlock_disaster' : 'lock_disaster';
+    dispatchSocket.send(JSON.stringify({
+        action: action,
+        disaster_id: dIdStr,
+        user_id: dispatcherId
+    }));
+}
+
+function dispatchSuppliesWS(disasterId) {
+    if (!dispatchSocket || dispatchSocket.readyState !== WebSocket.OPEN) {
+        alert('Collaborative Dispatch WebSocket is connecting... Please retry in a moment.');
+        return;
+    }
+    const dIdStr = String(disasterId);
+    const lockInfo = lockedDisastersMap[dIdStr];
+    if (lockInfo && lockInfo.locked_by !== dispatcherId) {
+        alert(`Cannot dispatch: this disaster is locked by ${lockInfo.locked_by}.`);
+        return;
+    }
+
+    dispatchSocket.send(JSON.stringify({
+        action: 'dispatch_supplies',
+        disaster_id: dIdStr,
+        user_id: dispatcherId
+    }));
+}
+
+window.toggleLockDisaster = toggleLockDisaster;
+window.dispatchSuppliesWS = dispatchSuppliesWS;
 
 // Initialize dashboard on page load
 initializeDashboard();

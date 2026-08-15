@@ -5,9 +5,10 @@ from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 from typing import Optional, List, Dict, Any, cast
 from pydantic import BaseModel, Field
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
+from websocket_manager import manager
 try:
     from fpdf import FPDF  # type: ignore
 except ImportError:
@@ -174,6 +175,73 @@ async def health_check(db: AsyncSession = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Database connection failed: {str(e)}"
         )
+
+
+@app.websocket("/ws/dispatch")
+async def websocket_dispatch(websocket: WebSocket):
+    """
+    WebSocket endpoint for real-time collaborative dispatching.
+    Handles locking/unlocking disasters and supply dispatch broadcasts across dispatchers.
+    """
+    await manager.connect(websocket)
+    try:
+        # Initial sync: send current locked disasters state to newly connected client
+        await websocket.send_json({
+            "type": "INIT_LOCKS",
+            "locked_disasters": manager.locked_disasters
+        })
+
+        while True:
+            data = await websocket.receive_json()
+            action = data.get("action")
+            disaster_id = str(data.get("disaster_id", ""))
+            user_id = data.get("user_id") or data.get("dispatcher_id") or "Dispatcher_Unknown"
+
+            if action == "lock_disaster":
+                lock_info = manager.lock_disaster(disaster_id, user_id)
+                await manager.broadcast({
+                    "type": "DISASTER_LOCKED",
+                    "disaster_id": disaster_id,
+                    "locked_by": user_id,
+                    "timestamp": lock_info["timestamp"]
+                })
+
+            elif action == "unlock_disaster":
+                manager.unlock_disaster(disaster_id)
+                await manager.broadcast({
+                    "type": "DISASTER_UNLOCKED",
+                    "disaster_id": disaster_id
+                })
+
+            elif action == "dispatch_supplies":
+                # Mark as dispatched in database if valid ID
+                try:
+                    async with AsyncSessionLocal() as db:
+                        if disaster_id.isdigit():
+                            d_id = int(disaster_id)
+                            sos_stmt = select(models.SOSAlert).where(models.SOSAlert.id == d_id)
+                            res = await db.execute(sos_stmt)
+                            sos_item = res.scalar_one_or_none()
+                            if sos_item:
+                                sos_item.status = "dispatched"
+                                await db.commit()
+                except Exception as db_err:
+                    print(f"Notice during dispatch database update: {db_err}")
+
+                # Unlock disaster upon dispatch completion
+                manager.unlock_disaster(disaster_id)
+
+                await manager.broadcast({
+                    "type": "DISASTER_DISPATCHED",
+                    "disaster_id": disaster_id,
+                    "dispatched_by": user_id
+                })
+
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+    except Exception as e:
+        print(f"WebSocket execution error: {e}")
+        manager.disconnect(websocket)
 
 
 @app.post("/api/ingest-history", tags=["pipeline"])
@@ -417,47 +485,21 @@ async def predict_relief(
 @app.get("/api/dashboard-data", tags=["dashboard"])
 async def dashboard_data(db: AsyncSession = Depends(get_db)):
     """
-    Queries the database using a LEFT OUTER JOIN to fetch all DisasterEvent records
-    immediately along with any existing ReliefPrediction records.
+    Returns up-to-date live disasters prioritizing Myanmar & regional emergencies.
     """
-    stmt = (
-        select(models.DisasterEvent)
-        .outerjoin(models.ReliefPrediction)
-        .options(selectinload(models.DisasterEvent.predictions))
-        .order_by(models.DisasterEvent.id.desc())
-    )
-    result = await db.execute(stmt)
-    events = result.scalars().unique().all()
-
-    # If database has no disaster records yet, auto-populate from GDACS feed
-    if not events:
-        disasters = await fetch_active_disasters()
-        for d in disasters:
-            dt_val = parse_created_at(d.get("created_at"))
-            evt = models.DisasterEvent(
-                title=d["title"],
-                latitude=d["lat"],
-                longitude=d["lon"],
-                severity=d["severity"],
-                created_at=dt_val
-            )
-            db.add(evt)
-        await db.commit()
-
-        result = await db.execute(stmt)
-        events = result.scalars().unique().all()
-
-    events = events[:50]
+    disasters = await fetch_active_disasters()
 
     depots_stmt = select(models.RescueDepot)
     depots_res = await db.execute(depots_stmt)
     all_depots = depots_res.scalars().all()
 
     payload = []
-    for evt in events:
-        lat_val = float(evt.latitude) if evt.latitude is not None else 0.0
-        lon_val = float(evt.longitude) if evt.longitude is not None else 0.0
-        sev_val = float(evt.severity) if evt.severity is not None else 5.0
+    for idx, d in enumerate(disasters, 1):
+        lat_val = float(d.get("lat", 0.0))
+        lon_val = float(d.get("lon", 0.0))
+        sev_val = float(d.get("severity", 5.0))
+        title = d.get("title", "Active Emergency Event")
+        created_at_str = d.get("created_at") or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
         spatial = analyze_disaster_impact(lat_val, lon_val, sev_val)
         w_val = float(spatial.get("total_water_liters") or (sev_val * 15000.0))
@@ -471,10 +513,10 @@ async def dashboard_data(db: AsyncSession = Depends(get_db)):
         base_rescue_time = ml_pred.get("estimated_rescue_time", 4.5)
 
         nearest_depot_info: Optional[Dict[str, Any]] = None
-        if is_within_asean(lat_val, lon_val) and all_depots:
-            def get_depot_dist(d: Any) -> float:
-                d_lat = float(getattr(d, "latitude", 0.0) or 0.0)
-                d_lon = float(getattr(d, "longitude", 0.0) or 0.0)
+        if all_depots:
+            def get_depot_dist(dp: Any) -> float:
+                d_lat = float(getattr(dp, "latitude", 0.0) or 0.0)
+                d_lon = float(getattr(dp, "longitude", 0.0) or 0.0)
                 return haversine_distance(lat_val, lon_val, d_lat, d_lon)
 
             closest_depot = min(all_depots, key=get_depot_dist)
@@ -491,28 +533,26 @@ async def dashboard_data(db: AsyncSession = Depends(get_db)):
                 "distance_km": round(dist, 2)
             }
 
-        dispatch_hours = 0.0
-        if nearest_depot_info is not None:
-            dist_km = float(nearest_depot_info.get("distance_km", 0.0))
-            dispatch_hours = round(dist_km / 45.0, 1)
-
+        dispatch_hours = round(nearest_depot_info["distance_km"] / 45.0, 1) if nearest_depot_info else 1.0
         total_rescue_time = round(base_rescue_time + dispatch_hours, 1)
 
         latest_pred = {
-            "id": evt.id,
+            "id": idx,
             "water_liters": w_liters,
             "food_packs": f_packs,
             "total_estimated_budget_usd": total_budget,
-            "created_at": evt.created_at.strftime("%Y-%m-%d %H:%M:%S UTC") if evt.created_at else None
+            "created_at": created_at_str
         }
 
         payload.append({
-            "id": evt.id,
-            "title": evt.title,
-            "latitude": evt.latitude,
-            "longitude": evt.longitude,
-            "severity": evt.severity,
-            "created_at": evt.created_at.strftime("%Y-%m-%d %H:%M:%S UTC") if evt.created_at else None,
+            "id": idx,
+            "title": title,
+            "disaster_type": d.get("disaster_type", "Flood"),
+            "latitude": lat_val,
+            "longitude": lon_val,
+            "severity": sev_val,
+            "country": d.get("country", "Myanmar"),
+            "created_at": created_at_str,
             "predictions": [latest_pred],
             "latest_prediction": latest_pred,
             "estimated_rescue_time": total_rescue_time,
@@ -520,11 +560,7 @@ async def dashboard_data(db: AsyncSession = Depends(get_db)):
             "nearest_depot": nearest_depot_info
         })
 
-    return {
-        "status": "success",
-        "count": len(payload),
-        "dashboard_data": payload
-    }
+    return {"status": "success", "count": len(payload), "dashboard_data": payload}
 
 
 @app.get("/api/export-report/{event_id}", tags=["reports"])
@@ -798,11 +834,12 @@ async def mission_analytics(db: AsyncSession = Depends(get_db)):
 
 
 @app.get("/api/nearest-depot", tags=["routing"])
-async def nearest_depot(lat: float, lon: float, db: AsyncSession = Depends(get_db)):
+async def nearest_depot(lat: float, lon: float, severity: float = 5.0, title: str = "", db: AsyncSession = Depends(get_db)):
     """
     Finds and returns the nearest RescueDepot to a given coordinate using Haversine distance.
+    Includes multi-modal transport ETA calculations (Land, Air, Water).
     """
-    result = await find_nearest_depot(target_lat=lat, target_lon=lon, db=db)
+    result = await find_nearest_depot(target_lat=lat, target_lon=lon, db=db, severity=severity, disaster_title=title)
     return result
 
 
@@ -827,18 +864,12 @@ async def build_emergency_payload(disaster_event: Any, db: AsyncSession) -> Dict
         created_at_val = getattr(disaster_event, "created_at", None)
         created_at = created_at_val.isoformat() if created_at_val else datetime.now(timezone.utc).isoformat()
 
-    if is_within_asean(lat, lon):
-        spatial = analyze_disaster_impact(lat, lon, severity)
-        depot_res = await find_nearest_depot(target_lat=lat, target_lon=lon, db=db)
-        nearest_depot_info = depot_res.get("nearest_depot", None)
-        affected_population = spatial.get("affected_population", 0)
-        total_water_liters = spatial.get("total_water_liters", 0.0)
-        total_food_packs = spatial.get("total_food_packs", 0.0)
-    else:
-        nearest_depot_info = None
-        affected_population = 0
-        total_water_liters = 0.0
-        total_food_packs = 0.0
+    spatial = analyze_disaster_impact(lat, lon, severity)
+    depot_res = await find_nearest_depot(target_lat=lat, target_lon=lon, db=db, severity=severity, disaster_title=title)
+    nearest_depot_info = depot_res.get("nearest_depot", None)
+    affected_population = spatial.get("affected_population", 0)
+    total_water_liters = spatial.get("total_water_liters", 0.0)
+    total_food_packs = spatial.get("total_food_packs", 0.0)
 
     return {
         "id": evt_id,

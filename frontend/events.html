@@ -95,7 +95,7 @@
                         <th>Water Required</th>
                         <th>Food Required</th>
                         <th>Est. Budget</th>
-                        <th>Est. Rescue Time</th>
+                        <th>Multi-Modal Dispatch ETAs (Land / Air / Water)</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -282,9 +282,88 @@
                 const pred = evt.latest_prediction || (evt.predictions && evt.predictions[0]) || {};
                 const waterLiters = Math.round(pred.water_liters || evt.water_needed_liters || 15000);
                 const foodPacks = Math.round(pred.food_packs || evt.food_needed_packs || 2500);
-                const estBudget = evt.total_estimated_budget_usd || ((waterLiters * 0.5) + (foodPacks * 3.5));
-                const rescueTime = evt.estimated_rescue_time || evt.ai_rescue_time_hrs || 178;
-                const evtId = evt.id || 1;
+                function calculateClientETABreakdown(distKm, severity, title) {
+                    const d = Math.max(0.1, parseFloat(distKm) || 0);
+                    const sev = parseFloat(severity) || 5.0;
+                    const titleLower = (title || '').toLowerCase();
+
+                    const landTotal = (d * 1.3 / 50.0) + 0.5;
+                    const landH = Math.floor(landTotal);
+                    const landM = Math.round((landTotal - landH) * 60);
+
+                    const airTotal = (d * 1.05 / 220.0) + 0.3;
+                    const airH = Math.floor(airTotal);
+                    const airM = Math.round((airTotal - airH) * 60);
+
+                    const waterTotal = (d * 1.4 / 25.0) + 0.6;
+                    const waterH = Math.floor(waterTotal);
+                    const waterM = Math.round((waterTotal - waterH) * 60);
+
+                    const isWater = ['flood', 'tsunami', 'cyclone', 'storm', 'river', 'sea', 'coastal', 'drowning'].some(k => titleLower.includes(k));
+                    let recMode = 'land';
+                    let rationale = '';
+
+                    if (isWater && d <= 80) {
+                        recMode = 'water';
+                        rationale = `🚢 WATER/BOAT RECOMMENDED`;
+                    } else if (sev >= 7.0 || d >= 120) {
+                        recMode = 'air';
+                        rationale = `🚁 AIR HELICOPTER RECOMMENDED`;
+                    } else {
+                        recMode = 'land';
+                        rationale = `🚚 LAND CONVOY RECOMMENDED`;
+                    }
+
+                    return {
+                        recommended_mode: recMode,
+                        recommendation_rationale: rationale,
+                        modes: {
+                            land: { formatted_time: `${landH}h ${landM}m` },
+                            air: { formatted_time: `${airH}h ${airM}m` },
+                            water: { formatted_time: `${waterH}h ${waterM}m` }
+                        }
+                function calculateHaversineKm(lat1, lon1, lat2, lon2) {
+                    const R = 6371.0;
+                    const dLat = (lat2 - lat1) * Math.PI / 180;
+                    const dLon = (lon2 - lon1) * Math.PI / 180;
+                    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+                    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                    return R * c;
+                }
+
+                function getNearestDepotDistance(targetLat, targetLon) {
+                    const lat = parseFloat(targetLat);
+                    const lon = parseFloat(targetLon);
+                    if (isNaN(lat) || isNaN(lon)) return 45.0;
+                    const depots = [
+                        { lat: 16.8661, lon: 96.1561 },
+                        { lat: 19.7633, lon: 96.0785 },
+                        { lat: 21.9588, lon: 96.0891 }
+                    ];
+                    let minDist = Infinity;
+                    for (const d of depots) {
+                        const dist = calculateHaversineKm(lat, lon, d.lat, d.lon);
+                        if (dist < minDist) minDist = dist;
+                    }
+                    return minDist === Infinity ? 45.0 : Math.round(minDist * 100) / 100;
+                }
+
+                const distKm = (evt.nearest_depot && evt.nearest_depot.distance_km)
+                    ? evt.nearest_depot.distance_km
+                    : getNearestDepotDistance(lat, lon);
+                const eta = (evt.nearest_depot && evt.nearest_depot.eta_breakdown)
+                    ? evt.nearest_depot.eta_breakdown
+                    : calculateClientETABreakdown(distKm, sev, title);
+
+                const etaCellHtml = `
+                    <div style="display: flex; flex-direction: column; gap: 3px; font-size: 11px;">
+                        <span style="color: ${eta.recommended_mode==='land'?'#fbbf24':'#cbd5e1'}; font-weight: ${eta.recommended_mode==='land'?'800':'500'}; background: ${eta.recommended_mode==='land'?'rgba(245, 158, 11, 0.15)':'transparent'}; padding: 1px 4px; border-radius: 4px;">🚚 <b>Land:</b> ${eta.modes.land.formatted_time}</span>
+                        <span style="color: ${eta.recommended_mode==='air'?'#fbbf24':'#cbd5e1'}; font-weight: ${eta.recommended_mode==='air'?'800':'500'}; background: ${eta.recommended_mode==='air'?'rgba(245, 158, 11, 0.15)':'transparent'}; padding: 1px 4px; border-radius: 4px;">🚁 <b>Air:</b> ${eta.modes.air.formatted_time}</span>
+                        <span style="color: ${eta.recommended_mode==='water'?'#fbbf24':'#cbd5e1'}; font-weight: ${eta.recommended_mode==='water'?'800':'500'}; background: ${eta.recommended_mode==='water'?'rgba(245, 158, 11, 0.15)':'transparent'}; padding: 1px 4px; border-radius: 4px;">🚢 <b>Water:</b> ${eta.modes.water.formatted_time}</span>
+                    </div>
+                `;
 
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
@@ -300,7 +379,7 @@
                     <td style="color: var(--accent-neon-blue); font-weight: 700;">${waterLiters.toLocaleString()} L</td>
                     <td style="color: var(--accent-warning-yellow); font-weight: 700;">${foodPacks.toLocaleString()} Packs</td>
                     <td style="color: var(--accent-green); font-weight: 800;">$${Math.round(estBudget).toLocaleString()} USD</td>
-                    <td style="color: var(--accent-action-purple); font-weight: 700;">${rescueTime} hrs</td>
+                    <td>${etaCellHtml}</td>
                     <td>
                         <div style="display: flex; gap: 8px; align-items: center;">
                             <a href="index.html?lat=${lat}&lon=${lon}&title=${encodeURIComponent(title)}&sev=${sev}" class="btn-nav-blue" style="padding: 4px 8px; font-size: 11px; text-decoration: none;">

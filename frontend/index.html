@@ -712,6 +712,7 @@
             <button class="btn-nav-teal" id="btn-refresh-logistics" onclick="refreshLogistics()">
                 <span id="refresh-icon">🔄</span> Refresh
             </button>
+            <span class="dispatcher-id-badge" id="dispatcher-id-display">👤 Connecting...</span>
             <div class="nav-status-badge">
                 <span>LIVE TELEMETRY</span>
             </div>
@@ -820,6 +821,31 @@
                 <div class="modal-field-row">
                     <span>🛡️ Assigned Relief Depot:</span>
                     <span class="modal-field-val" id="modal-depot" style="color: #34d399;">Nearest Depot</span>
+                </div>
+                
+                <!-- Multi-Modal Transport ETA Breakdown -->
+                <div style="margin-top: 12px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+                    <div style="font-size: 11px; font-weight: 700; color: #cbd5e1; letter-spacing: 0.5px; text-transform: uppercase;">
+                        ⏱️ Estimated Response Time (ETA Breakdown):
+                    </div>
+                    <div class="eta-card-grid">
+                        <div class="eta-mode-card" id="eta-card-land">
+                            <div class="eta-icon">🚚</div>
+                            <div class="eta-label">Land Convoy</div>
+                            <div class="eta-value" id="eta-val-land">--</div>
+                        </div>
+                        <div class="eta-mode-card" id="eta-card-air">
+                            <div class="eta-icon">🚁</div>
+                            <div class="eta-label">Air Helicopter</div>
+                            <div class="eta-value" id="eta-val-air">--</div>
+                        </div>
+                        <div class="eta-mode-card" id="eta-card-water">
+                            <div class="eta-icon">🚢</div>
+                            <div class="eta-label">Rescue Boat</div>
+                            <div class="eta-value" id="eta-val-water">--</div>
+                        </div>
+                    </div>
+                    <div class="eta-rationale-box" id="modal-eta-rationale" style="display: none;"></div>
                 </div>
             </div>
             <div class="modal-actions">

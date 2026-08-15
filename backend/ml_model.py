@@ -207,24 +207,28 @@ def predict_rescue_needs(severity: float, affected_people: int = 5000, lat: floa
     water_liters = max(100.0, float(preds[0]))
     food_packs = max(50.0, float(preds[1]))
 
-    # Spatial Distance & Convoy Travel Time Calculation
+    # Spatial Distance & Multi-Modal Travel Time Calculation
+    from routing import calculate_multimodal_eta
     depot_info = find_nearest_depot(float(lat), float(lon))
     distance_km = float(depot_info.get("distance_km", 10.0))
 
-    # Travel time assuming emergency supply convoy average speed of ~45 km/h
-    travel_time_hours = round(distance_km / 45.0, 1)
+    eta_breakdown = calculate_multimodal_eta(distance_km, severity=severity)
 
     # On-site operational time based on severity and affected population
     on_site_hours = round(1.5 + (float(severity) * 0.75) + (affected_people / 2500.0), 1)
 
-    total_rescue_time = round(travel_time_hours + on_site_hours, 1)
+    rec_mode_key = eta_breakdown.get("recommended_mode", "land")
+    rec_travel_hours = eta_breakdown["modes"][rec_mode_key]["total_hours"]
+    total_rescue_time = round(rec_travel_hours + on_site_hours, 1)
 
     return {
         "water_liters": round(water_liters, 1),
         "food_packs": round(food_packs, 1),
         "estimated_rescue_time": total_rescue_time,
-        "dispatch_travel_hours": travel_time_hours,
+        "dispatch_travel_hours": rec_travel_hours,
         "on_site_operation_hours": on_site_hours,
         "distance_km": distance_km,
-        "nearest_depot_name": depot_info.get("name", "Nearest Supply Hub")
+        "nearest_depot_name": depot_info.get("name", "Nearest Supply Hub"),
+        "eta_breakdown": eta_breakdown
     }
+
