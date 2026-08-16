@@ -33,7 +33,7 @@ async def generate_mission_report(db: AsyncSession) -> Dict[str, Any]:
         d_lon = float(d.longitude) if d.longitude is not None else 0.0
         d_sev = float(d.severity) if d.severity is not None else 5.0
 
-        spatial = analyze_disaster_impact(d_lat, d_lon, d_sev)
+        spatial = await analyze_disaster_impact(db, d_lat, d_lon, d_sev)
         w_liters = round(spatial.get("total_water_liters", d_sev * 15000))
         f_packs = round(spatial.get("total_food_packs", d_sev * 4000))
         affected_pop = spatial.get("affected_population", 5000)

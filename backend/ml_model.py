@@ -84,12 +84,13 @@ async def train_rescue_model(db: AsyncSession) -> Dict[str, Any]:
     Loads HistoricalRescueOp records from the database into Pandas,
     trains a Multi-Target RandomForestRegressor on cleaned geographic features (latitude, longitude, severity)
     to predict logistical needs (water_used_liters, food_used_packs, rescue_time_hours),
-    and saves rescue_logistics_model.joblib.
+    evaluates using proper MLOps metrics (RMSE, R2), and saves rescue_logistics_model.joblib.
     """
     from sklearn.ensemble import RandomForestRegressor
+    from sklearn.model_selection import train_test_split
+    from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
     from database import init_db_schema
 
-    # Guarantee database tables and column migrations exist prior to executing select queries
     try:
         await init_db_schema()
     except Exception as e:
@@ -100,10 +101,7 @@ async def train_rescue_model(db: AsyncSession) -> Dict[str, Any]:
     records = result.scalars().all()
 
     if not records:
-        # Auto-ingest real USGS records if DB table is empty
-        await ingest_rescue_data(db)
-        result = await db.execute(stmt)
-        records = result.scalars().all()
+        raise ValueError("No historical rescue dataset found or ingested for training. Please run ingest_real_data.py first.")
 
     df = pd.DataFrame([
         {
@@ -122,21 +120,35 @@ async def train_rescue_model(db: AsyncSession) -> Dict[str, Any]:
     X = df[['latitude', 'longitude', 'severity']].fillna(0)
     y = df[['water_used_liters', 'food_used_packs', 'rescue_time_hours']].fillna(0)
 
-    model = RandomForestRegressor(n_estimators=20, n_jobs=-1, random_state=42)
-    model.fit(X, y)
+    # Train-test split for evaluation
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    model = RandomForestRegressor(n_estimators=50, max_depth=15, n_jobs=-1, random_state=42)
+    model.fit(X_train, y_train)
+    
+    # Evaluation
+    predictions = model.predict(X_test)
+    rmse = np.sqrt(mean_squared_error(y_test, predictions))
+    mae = mean_absolute_error(y_test, predictions)
+    r2 = r2_score(y_test, predictions)
 
     os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
     joblib.dump(model, MODEL_PATH)
     print(f"Rescue Logistics RandomForest model trained on geographic features and saved to {MODEL_PATH}")
+    print(f"Metrics: RMSE={rmse:.2f}, MAE={mae:.2f}, R2={r2:.2f}")
 
     return {
         "status": "success",
-        "rows_trained": len(df),
+        "rows_trained": len(X_train),
         "model_file": MODEL_PATH,
         "features": list(X.columns),
-        "targets": list(y.columns)
+        "targets": list(y.columns),
+        "metrics": {
+            "rmse": round(rmse, 2),
+            "mae": round(mae, 2),
+            "r2_score": round(r2, 2)
+        }
     }
-
 
 _cached_model = None
 

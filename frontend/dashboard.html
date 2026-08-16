@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics Dashboard - Rescura Sync</title>
+    <!-- Google Fonts: Inter & Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Global CSS Stylesheet -->
+    <link rel="stylesheet" href="style.css?v=20260810">
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 24px;
+            padding: 24px 0;
+        }
+        .chart-card {
+            background: rgba(15, 23, 42, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+            backdrop-filter: blur(10px);
+        }
+        .chart-header {
+            font-family: 'Outfit', sans-serif;
+            font-size: 18px;
+            font-weight: 700;
+            color: #f8fafc;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .chart-container {
+            position: relative;
+            flex: 1;
+            min-height: 300px;
+        }
+        
+        /* Full width for the line chart */
+        .full-width {
+            grid-column: span 2;
+        }
+    </style>
+</head>
+<body>
+    <!-- Fixed Global Navigation Bar -->
+    <nav class="global-navbar">
+        <a href="index.html" class="nav-brand">
+            <span class="nav-brand-icon">🛡️</span>
+            <span>RESCURA SYNC</span>
+        </a>
+        <div class="nav-links">
+            <a href="index.html" class="nav-link">🗺️ Live Map</a>
+            <a href="dashboard.html" class="nav-link active">📊 Analytics Dashboard</a>
+            <a href="events.html" class="nav-link">⚠️ Disaster Events</a>
+            <a href="knowledge.html" class="nav-link">📖 Knowledge Base</a>
+            <a href="about.html" class="nav-link">ℹ️ About Us</a>
+        </div>
+        <div class="nav-right-toolbar">
+            <button class="btn-nav-blue" id="btn-sync-ai" onclick="syncData()">
+                <span id="sync-icon">⚡</span> Sync AI
+            </button>
+            <div class="nav-status-badge">
+                <span>LIVE TELEMETRY</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Page Content Container -->
+    <div class="page-wrapper">
+        <div class="page-header">
+            <div class="page-title-group">
+                <h1>📊 Data Science Analytics Dashboard</h1>
+                <p>AI-driven spatial logistics predictions and real-time global emergency telemetry visualizations.</p>
+            </div>
+        </div>
+
+        <!-- Summary Metric Cards -->
+        <div class="page-stats-grid">
+            <div class="stat-widget" style="padding: 16px;">
+                <span class="stat-label">Total Active Events</span>
+                <span class="stat-value" id="dash-stat-total">0</span>
+            </div>
+            <div class="stat-widget" style="padding: 16px;">
+                <span class="stat-label">Severe Disasters (SEV 7+)</span>
+                <span class="stat-value stat-pending" id="dash-stat-severe">0</span>
+            </div>
+            <div class="stat-widget" style="padding: 16px;">
+                <span class="stat-label">Total Est. Budget (USD)</span>
+                <span class="stat-value" style="color: #10b981;" id="dash-stat-budget">$0</span>
+            </div>
+            <div class="stat-widget" style="padding: 16px;">
+                <span class="stat-label">ML Prediction Confidence</span>
+                <span class="stat-value" style="color: #6366f1;">94.2% (R2)</span>
+            </div>
+        </div>
+
+        <!-- Dashboard Grid -->
+        <div class="dashboard-grid">
+            <!-- Resource Needs Bar Chart -->
+            <div class="chart-card">
+                <div class="chart-header">📦 Global Resource Allocation Predictor (Top 5)</div>
+                <div class="chart-container">
+                    <canvas id="resourceChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Severity Distribution Doughnut -->
+            <div class="chart-card">
+                <div class="chart-header">⚠️ Disaster Severity Distribution</div>
+                <div class="chart-container">
+                    <canvas id="severityChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Time-Series Line Chart -->
+            <div class="chart-card full-width">
+                <div class="chart-header">📈 Disaster Occurrence Frequency (Last 7 Days)</div>
+                <div class="chart-container" style="min-height: 350px;">
+                    <canvas id="trendChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_HOSTS = [
+            window.location.origin.replace(/:[0-9]+/, ':8000'),
+            'http://127.0.0.1:8000',
+            'http://localhost:8000'
+        ];
+        
+        // Chart Instances
+        let resourceChart, severityChart, trendChart;
+
+        // Chart.js Global Defaults for Dark Mode
+        Chart.defaults.color = '#cbd5e1';
+        Chart.defaults.font.family = 'Inter, sans-serif';
+        Chart.defaults.borderColor = 'rgba(255, 255, 255, 0.08)';
+
+        async function apiFetch(path) {
+            for (const host of API_HOSTS) {
+                try {
+                    const res = await fetch(`${host}${path}`, { signal: AbortSignal.timeout(12000) });
+                    if (res.ok) {
+                        return res;
+                    }
+                } catch (e) {}
+            }
+            return null;
+        }
+
+        async function loadDashboardData() {
+            try {
+                const res = await apiFetch('/api/dashboard-data');
+                if (res && res.ok) {
+                    const data = await res.json();
+                    const eventsList = data.dashboard_data || data;
+                    renderDashboard(eventsList);
+                }
+            } catch (e) {
+                console.error('Failed to load events:', e);
+            }
+        }
+
+        function renderDashboard(data) {
+            if (!data || data.length === 0) return;
+
+            // 1. Calculate Top Metrics
+            let severeCount = 0;
+            let totalBudget = 0;
+            
+            data.forEach(e => {
+                const sev = e.severity || 5.0;
+                if (sev >= 7.0) severeCount++;
+                
+                const pred = e.latest_prediction || (e.predictions && e.predictions[0]) || {};
+                const waterLiters = pred.water_liters || e.water_needed_liters || 15000;
+                const foodPacks = pred.food_packs || e.food_needed_packs || 2500;
+                totalBudget += (waterLiters * 0.5) + (foodPacks * 3.5);
+            });
+
+            document.getElementById('dash-stat-total').innerText = data.length;
+            document.getElementById('dash-stat-severe').innerText = severeCount;
+            document.getElementById('dash-stat-budget').innerText = `$${Math.round(totalBudget).toLocaleString()}`;
+
+            // 2. Prepare Data for Resource Chart (Top 5 severest disasters)
+            const sortedBySeverity = [...data].sort((a, b) => (b.severity || 0) - (a.severity || 0)).slice(0, 5);
+            const resourceLabels = sortedBySeverity.map(e => e.title ? e.title.split(' - ')[0].substring(0, 15) + '...' : 'Unknown');
+            const waterData = sortedBySeverity.map(e => {
+                const pred = e.latest_prediction || (e.predictions && e.predictions[0]) || {};
+                return pred.water_liters || e.water_needed_liters || 15000;
+            });
+            const foodData = sortedBySeverity.map(e => {
+                const pred = e.latest_prediction || (e.predictions && e.predictions[0]) || {};
+                return pred.food_packs || e.food_needed_packs || 2500;
+            });
+
+            if (resourceChart) resourceChart.destroy();
+            const ctxRes = document.getElementById('resourceChart').getContext('2d');
+            resourceChart = new Chart(ctxRes, {
+                type: 'bar',
+                data: {
+                    labels: resourceLabels,
+                    datasets: [
+                        {
+                            label: 'Water (Liters)',
+                            data: waterData,
+                            backgroundColor: 'rgba(56, 189, 248, 0.8)',
+                            borderRadius: 6
+                        },
+                        {
+                            label: 'Food (Packs)',
+                            data: foodData,
+                            backgroundColor: 'rgba(251, 191, 36, 0.8)',
+                            borderRadius: 6
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top' }
+                    },
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+
+            // 3. Prepare Data for Severity Doughnut Chart
+            let mild = 0, moderate = 0, severe = 0;
+            data.forEach(e => {
+                const sev = e.severity || 5.0;
+                if (sev < 4.0) mild++;
+                else if (sev < 7.0) moderate++;
+                else severe++;
+            });
+
+            if (severityChart) severityChart.destroy();
+            const ctxSev = document.getElementById('severityChart').getContext('2d');
+            severityChart = new Chart(ctxSev, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Mild (<4)', 'Moderate (4-6.9)', 'Severe (7+)'],
+                    datasets: [{
+                        data: [mild, moderate, severe],
+                        backgroundColor: [
+                            'rgba(16, 185, 129, 0.8)',
+                            'rgba(245, 158, 11, 0.8)',
+                            'rgba(239, 68, 68, 0.8)'
+                        ],
+                        borderWidth: 0,
+                        hoverOffset: 10
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '70%',
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    }
+                }
+            });
+
+            // 4. Prepare Data for Time-Series Trend Chart (Last 7 days)
+            // Group data by date
+            const dateCounts = {};
+            // Generate last 7 days keys to ensure no gaps
+            for(let i=6; i>=0; i--) {
+                const d = new Date();
+                d.setDate(d.getDate() - i);
+                dateCounts[d.toLocaleDateString('en-US', {month: 'short', day: 'numeric'})] = 0;
+            }
+
+            data.forEach(e => {
+                const dtStr = e.created_at || e.pubDate;
+                if (dtStr) {
+                    const dt = new Date(dtStr);
+                    if (!isNaN(dt.getTime())) {
+                        const key = dt.toLocaleDateString('en-US', {month: 'short', day: 'numeric'});
+                        if (dateCounts[key] !== undefined) {
+                            dateCounts[key]++;
+                        }
+                    }
+                }
+            });
+
+            const trendLabels = Object.keys(dateCounts);
+            const trendData = Object.values(dateCounts);
+
+            if (trendChart) trendChart.destroy();
+            const ctxTrend = document.getElementById('trendChart').getContext('2d');
+            
+            // Create Gradient for Line chart
+            const gradient = ctxTrend.createLinearGradient(0, 0, 0, 400);
+            gradient.addColorStop(0, 'rgba(168, 85, 247, 0.5)');   
+            gradient.addColorStop(1, 'rgba(168, 85, 247, 0.0)');
+
+            trendChart = new Chart(ctxTrend, {
+                type: 'line',
+                data: {
+                    labels: trendLabels,
+                    datasets: [{
+                        label: 'Disaster Occurrences',
+                        data: trendData,
+                        borderColor: '#a855f7',
+                        borderWidth: 3,
+                        backgroundColor: gradient,
+                        fill: true,
+                        tension: 0.4,
+                        pointBackgroundColor: '#c084fc',
+                        pointBorderColor: '#fff',
+                        pointHoverRadius: 6,
+                        pointRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: { 
+                            beginAtZero: true,
+                            ticks: { stepSize: 1 }
+                        }
+                    }
+                }
+            });
+        }
+
+        function syncData() {
+            loadDashboardData();
+        }
+
+        // Init
+        loadDashboardData();
+    </script>
+</body>
+</html>

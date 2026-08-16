@@ -423,7 +423,7 @@ async def predict_relief(
         await db.refresh(event_rec)
 
     # Synchronize demographic calculation with analyze_disaster_impact
-    spatial = analyze_disaster_impact(lat, lon, severity)
+    spatial = await analyze_disaster_impact(db, lat, lon, severity)
     w_liters = round(spatial.get("total_water_liters", severity * 15000))
     f_packs = round(spatial.get("total_food_packs", severity * 4000))
     affected_pop = spatial.get("affected_population", 5000)
@@ -501,7 +501,7 @@ async def dashboard_data(db: AsyncSession = Depends(get_db)):
         title = d.get("title", "Active Emergency Event")
         created_at_str = d.get("created_at") or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
-        spatial = analyze_disaster_impact(lat_val, lon_val, sev_val)
+        spatial = await analyze_disaster_impact(db, lat_val, lon_val, sev_val)
         w_val = float(spatial.get("total_water_liters") or (sev_val * 15000.0))
         f_val = float(spatial.get("total_food_packs") or (sev_val * 4000.0))
         w_liters = round(w_val)
@@ -592,7 +592,7 @@ async def export_action_plan_pdf(event_id: int, db: AsyncSession = Depends(get_d
     evt_id = int(getattr(evt, "id", 1))
     evt_title = str(getattr(evt, "title", "Emergency Disaster Zone"))
 
-    spatial = analyze_disaster_impact(lat_val, lon_val, sev_val)
+    spatial = await analyze_disaster_impact(db, lat_val, lon_val, sev_val)
     w_val = float(spatial.get("total_water_liters") or (sev_val * 15000.0))
     f_val = float(spatial.get("total_food_packs") or (sev_val * 4000.0))
     w_liters = round(w_val)
@@ -864,7 +864,7 @@ async def build_emergency_payload(disaster_event: Any, db: AsyncSession) -> Dict
         created_at_val = getattr(disaster_event, "created_at", None)
         created_at = created_at_val.isoformat() if created_at_val else datetime.now(timezone.utc).isoformat()
 
-    spatial = analyze_disaster_impact(lat, lon, severity)
+    spatial = await analyze_disaster_impact(db, lat, lon, severity)
     depot_res = await find_nearest_depot(target_lat=lat, target_lon=lon, db=db, severity=severity, disaster_title=title)
     nearest_depot_info = depot_res.get("nearest_depot", None)
     affected_population = spatial.get("affected_population", 0)
@@ -1017,7 +1017,7 @@ async def create_test_emergency(
     await db.refresh(disaster_evt)
 
     # Calculate 50km radius spatial demographic impact and Sphere standard supplies
-    spatial = analyze_disaster_impact(req.latitude, req.longitude, req.severity)
+    spatial = await analyze_disaster_impact(db, req.latitude, req.longitude, req.severity)
 
     # Locate nearest supply depot
     depot_res = await find_nearest_depot(target_lat=req.latitude, target_lon=req.longitude, db=db)
