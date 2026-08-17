@@ -1,6 +1,75 @@
-population,vulnerable_ratio,disaster_severity,water_needed,food_needed
-5000,0.15,6.5,15000,10000
-12000,0.20,7.1,40000,28000
-2500,0.10,5.0,7500,5000
-80000,0.25,8.0,300000,200000
-15000,0.18,6.8,48000,32000
+disaster_name,year,event_type,country,population,vulnerable_ratio,disaster_severity,water_needed,food_needed,source_citation
+Cyclone Nargis (Ayeyarwady Delta),2008,Cyclone,Myanmar,2400000,0.45,9.2,9600000,5400000,EM-DAT / UN-OCHA Catastrophic Surge Archive
+Tarlay Shan Seismic Disaster (M6.8),2011,Earthquake,Myanmar,18000,0.30,7.8,72000,45000,USGS Earthquake Hazards / AHA Centre
+Thabeikkyin Seismic Emergency (M6.8),2012,Earthquake,Myanmar,35000,0.25,7.6,140000,88000,USGS / ReliefWeb
+Cyclone Giri (Rakhine Coastal),2010,Cyclone,Myanmar,260000,0.35,8.4,1040000,650000,EM-DAT Disaster Database
+Cyclone Komen & Nationwide Monsoon Floods,2015,Flood,Myanmar,1600000,0.40,8.1,6400000,3800000,UN-OCHA Myanmar Floods Report
+Chauk Central Magway Quake (M6.8),2016,Earthquake,Myanmar,85000,0.20,7.4,340000,210000,USGS Historic Quake Catalog
+Bago River Severe Inundation,2018,Flood,Myanmar,120000,0.25,7.2,480000,300000,Department of Disaster Management (DDM)
+Ye & Mon State Coastal Monsoon Floods,2019,Flood,Myanmar,95000,0.22,6.9,380000,240000,Myanmar Red Cross Society (MRCS)
+Hpakant Jade Mines Mega-Debris Disaster,2020,Landslide,Myanmar,4500,0.50,8.5,22500,15000,MIMU Hazard Incident Log
+Sagaing Fault Intermediate Tremor (M5.8),2021,Earthquake,Myanmar,28000,0.18,6.8,112000,70000,USGS Hazards
+Kalay Valley Flash Inundation,2021,Flood,Myanmar,64000,0.28,7.0,256000,160000,ReliefWeb Flash Update
+Ayeyarwady Delta Seasonal Surge,2022,Flood,Myanmar,180000,0.20,6.7,720000,450000,UN WFP Myanmar Operational Log
+Cyclone Mocha (Sittwe & Northern Rakhine),2023,Cyclone,Myanmar,1200000,0.50,9.0,4800000,3000000,AHA Centre Situation Report #8
+Bago Urban Mega-Flood Crisis,2023,Flood,Myanmar,150000,0.32,7.7,600000,375000,ASEAN Disaster Information Network (ADINet)
+Mandalay Inundation & Urban Runoff,2023,Flood,Myanmar,82000,0.24,6.5,328000,205000,Mandalay City Development Committee
+Shan Plateau Landslide & Flash Runoff,2024,Landslide,Myanmar,12000,0.35,7.1,48000,30000,MRCS Emergency Brief
+Myitkyina Kachin River Inundation,2024,Flood,Myanmar,110000,0.30,7.5,440000,275000,UN-OCHA Flash Report
+Taungoo Sittaung River Overflow,2024,Flood,Myanmar,75000,0.26,6.9,300000,187500,DDM Situation Bulletin
+Southern Mon & Tanintharyi Monsoon Crisis,2024,Flood,Myanmar,90000,0.25,7.0,360000,225000,AHA Centre Disaster Update
+Typhoon Yagi Remnants & Central Inundation,2024,Flood,Myanmar,890000,0.42,8.8,3560000,2225000,UN-OCHA / AHA Centre Regional Flash
+Indian Ocean Tsunami (Sumatra-Andaman M9.1),2004,Tsunami,Indonesia,550000,0.60,9.8,5500000,3300000,NOAA National Geophysical Data Center
+Yogyakarta Java Earthquake (M6.3),2006,Earthquake,Indonesia,320000,0.35,7.9,1280000,800000,BMKG Indonesia / USGS
+Padang West Sumatra Offshore Quake (M7.6),2009,Earthquake,Indonesia,450000,0.38,8.2,1800000,1125000,BNPB Indonesia / EM-DAT
+Mount Merapi Pyroclastic Inundation,2010,Volcano,Indonesia,350000,0.40,8.0,1400000,875000,Centre for Volcanology (PVMBG)
+Palu Sulawesi Earthquake & Liquefaction (M7.5),2018,Earthquake,Indonesia,210000,0.48,8.7,945000,600000,AHA Centre / BNPB Flash Update
+Sunda Strait Krakatoa Tsunami Surge,2018,Tsunami,Indonesia,42000,0.40,7.8,168000,105000,BMKG / ReliefWeb
+Lombok Sequential Quakes (M6.9),2018,Earthquake,Indonesia,390000,0.32,7.9,1248000,780000,BNPB Indonesia
+Cianjur West Java Fault Quake (M5.6),2022,Earthquake,Indonesia,115000,0.36,7.5,414000,258750,BNPB / EM-DAT
+Mount Semeru Volcanic Inundation,2021,Volcano,Indonesia,10000,0.45,7.6,45000,28125,PVMBG Java Bulletin
+Jakarta Monsoon Mega-Inundation,2020,Flood,Indonesia,170000,0.22,7.3,680000,425000,Jakarta Provincial Disaster Agency (BPBD)
+Super Typhoon Haiyan (Yolanda Cat 5),2013,Cyclone,Philippines,4100000,0.55,9.5,16400000,10250000,NDRRMC Philippines / UN-OCHA
+Bohol Visayas Island Quake (M7.2),2013,Earthquake,Philippines,350000,0.30,8.1,1400000,875000,PHIVOLCS / ReliefWeb
+Typhoon Bopha (Pablo Cat 5 Mindanao),2012,Cyclone,Philippines,700000,0.45,8.9,2800000,1750000,NDRRMC / EM-DAT
+Typhoon Mangkhut (Ompong Luzon),2018,Cyclone,Philippines,1600000,0.35,8.4,5600000,3500000,PAGASA / AHA Centre
+Typhoon Rai (Odette Southern Leyte/Cebu),2021,Cyclone,Philippines,3000000,0.42,8.8,12000000,7500000,NDRRMC Philippines Situation Report
+Taal Volcano Eruption & Ash Dispersion,2020,Volcano,Philippines,380000,0.30,7.7,114000,71250,PHIVOLCS Bulletin
+Luzon Central Cordillera Quake (M7.0),2022,Earthquake,Philippines,150000,0.25,7.6,600000,375000,USGS Hazards / NDRRMC
+Mindanao Sequential Quakes Series,2019,Earthquake,Philippines,260000,0.30,7.5,780000,487500,PHIVOLCS / EM-DAT
+Typhoon Vamco (Ulysses Marikina Basin),2020,Flood,Philippines,1200000,0.28,7.9,3360000,2100000,NDRRMC Flash Report
+Southern Leyte Guinsaugon Debris Slide,2006,Landslide,Philippines,3000,0.65,8.8,19500,12000,Mines and Geosciences Bureau (MGB)
+Chao Phraya Historic Mega-Floods,2011,Flood,Thailand,3000000,0.30,8.6,9000000,5625000,Department of Disaster Prevention (DDPM)
+Chiang Mai Ping River Overflow,2022,Flood,Thailand,140000,0.18,6.8,420000,262500,DDPM Northern Region
+Mae Sai & Chiang Rai Flash Inundation,2024,Flood,Thailand,95000,0.32,7.8,380000,237500,AHA Centre Flash Update
+Hat Yai Flash Inundation & Urban Surge,2010,Flood,Thailand,160000,0.22,7.1,480000,300000,DDPM Southern Division
+Phuket Tsunami Inundation,2004,Tsunami,Thailand,65000,0.50,9.0,325000,200000,Royal Thai Navy / NOAA
+Typhoon Damrey (Nha Trang Mekong Surge),2017,Cyclone,Vietnam,400000,0.35,7.9,1400000,875000,Vietnam Disaster Management Authority (VDMA)
+Central Vietnam Historic Flood Series,2020,Flood,Vietnam,1500000,0.38,8.3,5700000,3562500,UN-OCHA Vietnam Flash Update
+Typhoon Yagi Northern Mountain Inundation,2024,Cyclone,Vietnam,1800000,0.44,9.0,7200000,4500000,AHA Centre / VDMA
+Red River Delta Inundation Crisis,2008,Flood,Vietnam,800000,0.25,7.6,2000000,1250000,VDMA Archives
+Typhoon Ketsana (Central Highlands),2009,Cyclone,Vietnam,600000,0.32,8.0,1920000,1200000,EM-DAT Database
+Attapeu Xe-Pian Dam Breach Crisis,2018,Flood,Laos,13000,0.55,8.6,71500,45000,National Disaster Management Committee Laos
+Tropical Storm Son-Tinh Flash Inundation,2018,Flood,Laos,85000,0.30,7.2,255000,160000,AHA Centre Situation Report
+Northern Laos Mountain Flash Floods,2022,Flood,Laos,42000,0.28,6.9,117600,73500,Ministry of Labour and Social Welfare (MLSW)
+Mekong Basin Flash Flooding,2024,Flood,Laos,95000,0.26,7.3,247000,154375,AHA Centre
+Mekong River Severe Inundation,2000,Flood,Cambodia,3400000,0.35,8.2,11900000,7437500,NCDM Cambodia / EM-DAT
+Tonle Sap Seasonal Crisis & Inundation,2011,Flood,Cambodia,1500000,0.30,7.8,4500000,2812500,National Committee for Disaster Management (NCDM)
+Tropical Storm Nangka Flash Inundation,2020,Flood,Cambodia,800000,0.25,7.4,2000000,1250000,AHA Centre / NCDM
+Peninsular Malaysia December Flash Floods,2021,Flood,Malaysia,125000,0.18,7.2,375000,234375,NADMA Malaysia Situation Report
+Kelantan & Terengganu Monsoon Floods,2014,Flood,Malaysia,200000,0.22,7.5,600000,375000,National Disaster Management Agency (NADMA)
+Sabah Ranau Mount Kinabalu Quake (M6.0),2015,Earthquake,Malaysia,15000,0.20,6.8,30000,18750,METMalaysia / USGS
+Cyclone Sidr (Southwestern Bengal Coast),2007,Cyclone,Bangladesh,8900000,0.50,9.3,35600000,22250000,Ministry of Disaster Management Bangladesh
+Cyclone Amphan (Ganges Delta),2020,Cyclone,Bangladesh,2500000,0.40,8.9,10000000,6250000,UN-OCHA Bangladesh
+Cyclone Remal (Coastal Storm Surge),2024,Cyclone,Bangladesh,3750000,0.38,8.5,14250000,8906250,Disaster Management Bureau
+Sichuan Wenchuan Great Earthquake (M7.9),2008,Earthquake,China,45000000,0.35,9.6,157500000,98437500,China Earthquake Administration / USGS
+Lushan Ya'an Seismic Disaster (M6.6),2013,Earthquake,China,1500000,0.25,7.8,3750000,2343750,CEA / EM-DAT
+Ludian Yunnan Seismic Emergency (M6.2),2014,Earthquake,China,1080000,0.30,7.7,3240000,2025000,USGS Hazards
+Great East Japan Earthquake & Tsunami (M9.1),2011,Tsunami,Japan,470000,0.45,9.8,2115000,1321875,Japan Meteorological Agency (JMA) / USGS
+Noto Peninsula Subduction Quake (M7.5),2024,Earthquake,Japan,140000,0.28,8.2,392000,245000,Cabinet Office Japan Disaster Management
+Hualien Taiwan Offshore Quake (M7.4),2024,Earthquake,Taiwan,120000,0.22,8.0,264000,165000,Central Weather Administration (CWA)
+Gorkha Nepal Himalayan Quake (M7.8),2015,Earthquake,Nepal,8000000,0.48,8.9,38400000,24000000,Ministry of Home Affairs Nepal / UN-OCHA
+Kashmir Sub-Himalayan Quake (M7.6),2005,Earthquake,Pakistan,3500000,0.50,8.8,17500000,10937500,National Disaster Management Authority (NDMA)
+Pakistan Monsoon Super-Floods,2022,Flood,Pakistan,33000000,0.45,9.4,148500000,92812500,UN-OCHA Flash Appeal
+Assam Brahmaputra River Basin Floods,2022,Flood,India,5400000,0.30,7.8,16200000,10125000,Assam State Disaster Management (ASDMA)
+Cyclone Fani (Odisha Coast),2019,Cyclone,India,1200000,0.35,8.6,4200000,2625000,IMD / National Disaster Management Authority

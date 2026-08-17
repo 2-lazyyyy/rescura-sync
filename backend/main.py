@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from typing import Optional, List, Dict, Any, cast
 from pydantic import BaseModel, Field
 from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 from websocket_manager import manager
@@ -26,7 +27,7 @@ from services.supabase_client import fetch_recent_sos_alerts, aggregate_sos_demo
 from data_pipeline import ingest_mock_historical_data
 from ml_model import ingest_rescue_data, train_rescue_model, predict_rescue_needs
 from analytics import generate_mission_report
-from routing import find_nearest_depot, haversine_distance
+from routing import find_nearest_depot, haversine_distance, calculate_multimodal_eta
 from spatial_engine import analyze_disaster_impact
 from email.utils import parsedate_to_datetime
 
@@ -151,9 +152,9 @@ app.add_middleware(
 )
 
 
-@app.get("/")
-def root():
-    return {"message": "Rescura Sync API is running"}
+@app.get("/api/status", tags=["health"])
+def api_status():
+    return {"message": "Rescura Sync API is running", "status": "online"}
 
 
 @app.get("/health", tags=["health"])
@@ -482,16 +483,37 @@ async def predict_relief(
     return response
 
 
+_dashboard_cache: Dict[str, Any] = {}
+_dashboard_cache_time: float = 0.0
+
+
 @app.get("/api/dashboard-data", tags=["dashboard"])
 async def dashboard_data(db: AsyncSession = Depends(get_db)):
     """
-    Returns up-to-date live disasters prioritizing Myanmar & regional emergencies.
+    Returns up-to-date live disasters prioritizing Myanmar & regional emergencies with instant in-memory caching.
     """
+    global _dashboard_cache, _dashboard_cache_time
+    import time
+    now = time.time()
+    if _dashboard_cache and (now - _dashboard_cache_time < 30.0):
+        return _dashboard_cache
+
     disasters = await fetch_active_disasters()
 
     depots_stmt = select(models.RescueDepot)
     depots_res = await db.execute(depots_stmt)
     all_depots = depots_res.scalars().all()
+    cached_depots = [
+        (
+            dp.id,
+            dp.name,
+            float(dp.latitude or 0.0),
+            float(dp.longitude or 0.0),
+            float(dp.water_inventory or 0.0),
+            float(dp.food_inventory or 0.0)
+        )
+        for dp in all_depots
+    ]
 
     payload = []
     for idx, d in enumerate(disasters, 1):
@@ -509,28 +531,21 @@ async def dashboard_data(db: AsyncSession = Depends(get_db)):
         affected_pop = int(spatial.get("affected_population") or 5000)
         total_budget = float(spatial.get("total_estimated_budget_usd") or round((w_liters * 0.5) + (f_packs * 3.5), 2))
 
-        ml_pred = predict_rescue_needs(severity=sev_val, affected_people=affected_pop, lat=lat_val, lon=lon_val)
-        base_rescue_time = ml_pred.get("estimated_rescue_time", 4.5)
+        base_rescue_time = round(1.5 + (sev_val * 0.75) + (affected_pop / 2500.0), 1)
 
         nearest_depot_info: Optional[Dict[str, Any]] = None
-        if all_depots:
-            def get_depot_dist(dp: Any) -> float:
-                d_lat = float(getattr(dp, "latitude", 0.0) or 0.0)
-                d_lon = float(getattr(dp, "longitude", 0.0) or 0.0)
-                return haversine_distance(lat_val, lon_val, d_lat, d_lon)
-
-            closest_depot = min(all_depots, key=get_depot_dist)
-            c_lat = float(getattr(closest_depot, "latitude", 0.0) or 0.0)
-            c_lon = float(getattr(closest_depot, "longitude", 0.0) or 0.0)
-            dist = haversine_distance(lat_val, lon_val, c_lat, c_lon)
+        if cached_depots:
+            closest = min(cached_depots, key=lambda dp: haversine_distance(lat_val, lon_val, dp[2], dp[3]))
+            dist = haversine_distance(lat_val, lon_val, closest[2], closest[3])
             nearest_depot_info = {
-                "id": closest_depot.id,
-                "name": closest_depot.name,
-                "latitude": c_lat,
-                "longitude": c_lon,
-                "water_inventory": float(getattr(closest_depot, "water_inventory", 0.0) or 0.0),
-                "food_inventory": float(getattr(closest_depot, "food_inventory", 0.0) or 0.0),
-                "distance_km": round(dist, 2)
+                "id": closest[0],
+                "name": closest[1],
+                "latitude": closest[2],
+                "longitude": closest[3],
+                "water_inventory": closest[4],
+                "food_inventory": closest[5],
+                "distance_km": round(dist, 2),
+                "eta_breakdown": calculate_multimodal_eta(dist, severity=sev_val, disaster_title=title)
             }
 
         dispatch_hours = round(nearest_depot_info["distance_km"] / 45.0, 1) if nearest_depot_info else 1.0
@@ -560,7 +575,10 @@ async def dashboard_data(db: AsyncSession = Depends(get_db)):
             "nearest_depot": nearest_depot_info
         })
 
-    return {"status": "success", "count": len(payload), "dashboard_data": payload}
+    res_data = {"status": "success", "count": len(payload), "dashboard_data": payload}
+    _dashboard_cache = res_data
+    _dashboard_cache_time = now
+    return res_data
 
 
 @app.get("/api/export-report/{event_id}", tags=["reports"])
@@ -662,7 +680,7 @@ async def export_action_plan_pdf(event_id: int, db: AsyncSession = Depends(get_d
 
     pdf.set_font("Helvetica", "", 10)
     pdf.cell(91, 7, f"  Coordinates: {lat_val:.4f}, {lon_val:.4f}", border=1)
-    pdf.cell(91, 7, f"  Severity Index: SEV {sev_val}/10", border=1, new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(91, 7, f"  Severity Rating: {sev_val}/10", border=1, new_x="LMARGIN", new_y="NEXT")
 
     pdf.cell(91, 7, f"  Affected Population: {affected_pop:,} people", border=1)
     pdf.cell(91, 7, f"  Est. Rescue Time: {total_rescue_time} hours", border=1, new_x="LMARGIN", new_y="NEXT")
@@ -831,6 +849,139 @@ async def mission_analytics(db: AsyncSession = Depends(get_db)):
     """
     report = await generate_mission_report(db)
     return report
+
+
+def _classify_region(lat: float, lon: float, title: str = "") -> str:
+    """Maps lat/lon and event title to specific Asia-Pacific & Myanmar crisis sectors."""
+    t = (title or "").lower()
+    
+    # Granular Myanmar Crisis Corridors
+    if "bago" in t or "yangon" in t or (16.0 <= lat <= 18.5 and 95.5 <= lon <= 97.2):
+        return "Central (Bago/Yangon)"
+    if "mandalay" in t or "sagaing" in t or (21.0 <= lat <= 23.5 and 95.0 <= lon <= 96.8):
+        return "Upper Valley (Mandalay)"
+    if "delta" in t or "ayeyarwady" in t or "pathein" in t or (15.5 <= lat <= 17.5 and 94.5 <= lon <= 96.0):
+        return "Delta Coastal (Ayeyarwady)"
+    if "shan" in t or "taunggyi" in t or (19.5 <= lat <= 23.0 and 96.8 <= lon <= 99.5):
+        return "Eastern Plateau (Shan)"
+    if "rakhine" in t or "chin" in t or (18.0 <= lat <= 22.0 and 92.0 <= lon <= 94.5):
+        return "Western Coastal (Rakhine)"
+    if "kachin" in t or (23.5 <= lat <= 28.5 and 95.5 <= lon <= 98.5):
+        return "Northern Mountain (Kachin)"
+    if "tanintharyi" in t or "mon" in t or (10.0 <= lat <= 16.0 and 97.0 <= lon <= 99.5):
+        return "Southern Coastal (Mon)"
+        
+    # Regional Asia-Pacific / ASEAN Corridors
+    if 0.0 <= lat <= 25.0 and 95.0 <= lon <= 110.0:
+        return "Mekong Basin (ASEAN)"
+    if -11.0 <= lat <= 10.0 and 95.0 <= lon <= 142.0:
+        return "Maritime Southeast Asia"
+    if 20.0 <= lat <= 45.0 and 110.0 <= lon <= 145.0:
+        return "East Asia Zone"
+    if 5.0 <= lat <= 35.0 and 65.0 <= lon <= 95.0:
+        return "South Asia Basin"
+    
+    return "Asia-Pacific Regional"
+
+
+
+def _classify_event_type(title: str) -> str:
+    """Infers disaster event type from title string keywords."""
+    t = (title or "").lower()
+    if any(k in t for k in ["earthquake", "seismic", "quake", "tremor"]):
+        return "Earthquake"
+    if any(k in t for k in ["flood", "inundation", "river", "flash flood"]):
+        return "Flood"
+    if any(k in t for k in ["cyclone", "hurricane", "typhoon", "tropical storm"]):
+        return "Cyclone"
+    if any(k in t for k in ["drought", "dry", "arid"]):
+        return "Drought"
+    if any(k in t for k in ["wildfire", "fire", "blaze", "burn"]):
+        return "Wildfire"
+    if any(k in t for k in ["volcano", "eruption", "lava", "ash"]):
+        return "Volcano"
+    if any(k in t for k in ["tsunami", "wave", "tidal"]):
+        return "Tsunami"
+    if any(k in t for k in ["landslide", "mudslide", "debris", "avalanche"]):
+        return "Landslide"
+    return "Other"
+
+
+_analytics_cache: Dict[str, Any] = {}
+_analytics_cache_time: float = 0.0
+
+
+@app.get("/api/analytics", tags=["analytics"])
+async def platform_analytics(db: AsyncSession = Depends(get_db)):
+    """
+    Exposes aggregate platform analytics for Chart.js visualisation with instant in-memory caching:
+      - Total affected population globally across all active disaster events.
+      - Breakdown of active disasters by inferred event_type.
+      - Total water and food supplies needed, grouped by continental region.
+    """
+    global _analytics_cache, _analytics_cache_time
+    import time
+    now = time.time()
+    if _analytics_cache and (now - _analytics_cache_time < 15.0):
+        return _analytics_cache
+
+    # Pull active disasters (instant cached GDACS)
+    disasters = await fetch_active_disasters()
+
+    total_affected_population = 0
+    disasters_by_type: Dict[str, int] = {}
+    regional_supplies: Dict[str, Dict[str, float]] = {}
+
+    for d in disasters:
+        lat = float(d.get("lat", 0.0))
+        lon = float(d.get("lon", 0.0))
+        sev = float(d.get("severity", 5.0))
+        title = str(d.get("title", ""))
+        event_type = d.get("disaster_type") or _classify_event_type(title)
+
+        # Spatial impact for affected population
+        try:
+            spatial = analyze_disaster_impact(lat, lon, sev)
+            pop = int(spatial.get("affected_population") or 0)
+            w_liters = float(spatial.get("total_water_liters") or 0)
+            f_packs = float(spatial.get("total_food_packs") or 0)
+            if w_liters <= 0 or pop <= 0:
+                pop = max(pop, int(sev * 2500))
+                w_liters = float(max(w_liters, sev * 18000))
+                f_packs = float(max(f_packs, sev * 4500))
+        except Exception:
+            pop = int(sev * 2500)
+            w_liters = float(sev * 18000)
+            f_packs = float(sev * 4500)
+
+        total_affected_population += pop
+        disasters_by_type[event_type] = disasters_by_type.get(event_type, 0) + 1
+
+        region = _classify_region(lat, lon, title)
+        if region not in regional_supplies:
+            regional_supplies[region] = {"water_liters": 0.0, "food_packs": 0.0, "disaster_count": 0}
+
+        regional_supplies[region]["water_liters"] += w_liters
+        regional_supplies[region]["food_packs"] += f_packs
+        regional_supplies[region]["disaster_count"] += 1
+
+    # Round supply values for clean display
+    for region in regional_supplies:
+        regional_supplies[region]["water_liters"] = round(regional_supplies[region]["water_liters"])
+        regional_supplies[region]["food_packs"] = round(regional_supplies[region]["food_packs"])
+
+    res_data = {
+        "status": "success",
+        "total_active_events": len(disasters),
+        "total_active_disasters": len(disasters),
+        "total_affected_population": total_affected_population,
+        "disasters_by_type": disasters_by_type,
+        "regional_supplies": regional_supplies,
+        "regional_supply_deficits": regional_supplies,
+    }
+    _analytics_cache = res_data
+    _analytics_cache_time = now
+    return res_data
 
 
 @app.get("/api/nearest-depot", tags=["routing"])
@@ -1050,6 +1201,42 @@ async def create_test_emergency(
     await sse_event_queue.put(payload)
 
     return payload
+
+
+@app.get("/api/datasets", tags=["data"])
+async def list_datasets():
+    """Returns a list of all CSV datasets available in the backend."""
+    import glob
+    import os
+    
+    csv_files = glob.glob("*.csv")
+    # Return just the filenames
+    return {"datasets": [os.path.basename(f) for f in csv_files]}
+
+
+@app.get("/api/datasets/{filename}", tags=["data"])
+async def get_dataset(filename: str):
+    """Returns the raw CSV content of the specified dataset."""
+    import os
+    from fastapi.responses import FileResponse, PlainTextResponse
+    
+    # Simple security check to prevent directory traversal
+    if ".." in filename or "/" in filename or "\\" in filename:
+        return PlainTextResponse("Invalid filename", status_code=400)
+        
+    if not filename.endswith(".csv"):
+        filename += ".csv"
+        
+    if not os.path.exists(filename):
+        return PlainTextResponse(f"Dataset {filename} not found", status_code=404)
+        
+    return FileResponse(filename, media_type="text/csv", filename=filename)
+
+
+# Mount frontend static assets for unified single-port hosting
+frontend_dir = os.path.join(BASE_DIR, "..", "frontend")
+if os.path.exists(frontend_dir):
+    app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
 
 
 if __name__ == "__main__":

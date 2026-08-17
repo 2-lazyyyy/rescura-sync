@@ -5,3 +5,8 @@ __pycache__/
 .vscode/
 *.db
 backend/cache/
+*.log
+*.tmp
+*.bak
+*.git_orig
+*_diff.txt

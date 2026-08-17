@@ -9,30 +9,49 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
     <!-- Global CSS Stylesheet -->
-    <link rel="stylesheet" href="style.css?v=20260810">
+    <link rel="stylesheet" href="style.css?v=20260817-clean-light">
 </head>
 <body>
-    <!-- Fixed Global Navigation Bar -->
+        <!-- Fixed Global Navigation Bar -->
     <nav class="global-navbar">
         <a href="index.html" class="nav-brand">
             <span class="nav-brand-icon">🛡️</span>
             <span>RESCURA SYNC</span>
         </a>
         <div class="nav-links">
-            <a href="index.html" class="nav-link">🗺️ Live Map</a>
-            <a href="events.html" class="nav-link">⚠️ Disaster Events</a>
-            <a href="knowledge.html" class="nav-link active">📖 Knowledge Base</a>
-            <a href="about.html" class="nav-link">ℹ️ About Us</a>
+            <a href="index.html" class="nav-link">
+                <span>🗺️</span>
+                <span>Live Map</span>
+            </a>
+            <a href="analytics.html" class="nav-link">
+                <span>📊</span>
+                <span>Analytics Dashboard</span>
+            </a>
+            <a href="events.html" class="nav-link">
+                <span>⚠️</span>
+                <span>Disaster Events</span>
+            </a>
+            <a href="knowledge.html" class="nav-link active">
+                <span>📖</span>
+                <span>Knowledge Base</span>
+            </a>
+            <a href="about.html" class="nav-link">
+                <span>ℹ️</span>
+                <span>About Us</span>
+            </a>
         </div>
         <div class="nav-right-toolbar">
+            <a href="index.html#raw-data-modal" onclick="window.location.href='index.html'; setTimeout(() => openRawDataModal(), 300); return false;" class="btn-nav-amber" id="btn-raw-data" title="Inspect Database Datasets & Provenance">
+                <span>🗄️</span> Open Datasets
+            </a>
             <button class="btn-nav-purple" id="btn-pdf-download" onclick="downloadActionPlanPDF(1)">
-                <span id="pdf-icon">📄</span> Action Plan PDF
+                <span id="pdf-icon">📄</span> PDF
             </button>
             <button class="btn-nav-blue" id="btn-sync-ai" onclick="syncData()">
-                <span id="sync-icon">⚡</span> Sync AI
+                <span id="sync-icon">⚡</span> AI
             </button>
             <button class="btn-nav-teal" id="btn-refresh-logistics" onclick="refreshLogistics()">
-                <span id="refresh-icon">🔄</span> Refresh
+                <span id="refresh-icon">🔄</span>
             </button>
             <div class="nav-status-badge">
                 <span>LIVE TELEMETRY</span>
@@ -75,7 +94,7 @@
                 </div>
                 <div class="glass-card-body">
                     <p>Geographic proximity between supply depots and disaster epicenters is calculated using great-circle spherical distance via the <b>Haversine Formula</b>:</p>
-                    <p style="font-family: monospace; background: rgba(11, 15, 25, 0.8); padding: 12px; border-radius: 8px; font-size: 12px; color: var(--accent-neon-blue); border: 1px solid rgba(0, 240, 255, 0.2); margin: 10px 0;">
+                    <p style="font-family: var(--font-mono); background: #f1f5f9; padding: 12px; border-radius: 8px; font-size: 12px; color: #2563eb; border: 1px solid #cbd5e1; margin: 10px 0; font-weight: 600;">
                         d = 2r &middot; arcsin(&radic;(sin&sup2;(&Delta;&phi;/2) + cos(&phi;&thinsp;&sup1;)cos(&phi;&thinsp;&sup2;)sin&sup2;(&Delta;&lambda;/2)))
                     </p>
                     <p>Our 50km Sphere Engine draws a 50 km radial buffer around active epicenters to evaluate population density, road connectivity, and vulnerable civilian sectors.</p>
@@ -146,9 +165,9 @@
     </div>
 
     <script>
-        const API_HOST = window.location.origin.replace(':5500', ':8000');
+        const API_HOST = sessionStorage.getItem('rescura_api_host') || 'http://127.0.0.1:8000';
         function downloadActionPlanPDF(evtId = 1) {
-            window.open(`${API_HOST}/api/export-report/${evtId}`, '_blank');
+            window.open(`${API_HOST}/api/export-report/${evtId || 1}`, '_blank');
         }
         function syncData() {
             window.location.href = 'index.html';

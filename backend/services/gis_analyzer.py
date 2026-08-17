@@ -6,13 +6,19 @@ except ImportError:
 
 from services.depot_service import find_nearest_depot
 
+_route_cache: Dict[str, Dict[str, Any]] = {}
+
 
 async def get_evacuation_routes(lat: float, lon: float, radius_km: int = 6) -> Dict[str, Any]:
     """
     1. Finds nearest registered relief supply depot.
-    2. Downloads OpenStreetMap street network graph connecting depot to disaster site.
-    3. Calculates optimal supply/evacuation route starting directly at the nearest depot location and ending at the disaster center.
+    2. Generates optimal supply/evacuation route starting directly at the nearest depot location and ending at the disaster center.
+    3. Caches route calculations in-memory for instant sub-millisecond retrieval.
     """
+    cache_key = f"{round(lat, 4)}_{round(lon, 4)}_{radius_km}"
+    if cache_key in _route_cache:
+        return _route_cache[cache_key]
+
     nearest_depot = find_nearest_depot(lat, lon)
     depot_lat = float(nearest_depot["lat"])
     depot_lon = float(nearest_depot["lon"])
@@ -21,7 +27,7 @@ async def get_evacuation_routes(lat: float, lon: float, radius_km: int = 6) -> D
     nodes_count = 0
     edges_count = 0
 
-    if ox is not None and abs(lat - depot_lat) <= 0.35 and abs(lon - depot_lon) <= 0.35:
+    if ox is not None and abs(lat - depot_lat) <= 0.25 and abs(lon - depot_lon) <= 0.25:
         try:
             # Small bounding box covering depot and disaster site with light padding
             north = max(lat, depot_lat) + 0.02
@@ -59,7 +65,7 @@ async def get_evacuation_routes(lat: float, lon: float, radius_km: int = 6) -> D
     if not optimal_route_coords:
         optimal_route_coords = [[depot_lat, depot_lon], [lat, lon]]
 
-    return {
+    res = {
         "status": "success",
         "latitude": lat,
         "longitude": lon,
@@ -70,3 +76,6 @@ async def get_evacuation_routes(lat: float, lon: float, radius_km: int = 6) -> D
         "optimal_route_coords": optimal_route_coords,
         "graph_summary": f"Route calculated from nearest depot '{nearest_depot['name']}' to disaster zone."
     }
+    _route_cache[cache_key] = res
+    return res
+

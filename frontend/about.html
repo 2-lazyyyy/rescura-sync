@@ -9,30 +9,49 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
     <!-- Global CSS Stylesheet -->
-    <link rel="stylesheet" href="style.css?v=20260810">
+    <link rel="stylesheet" href="style.css?v=20260817-clean-light">
 </head>
 <body>
-    <!-- Fixed Global Navigation Bar -->
+        <!-- Fixed Global Navigation Bar -->
     <nav class="global-navbar">
         <a href="index.html" class="nav-brand">
             <span class="nav-brand-icon">🛡️</span>
             <span>RESCURA SYNC</span>
         </a>
         <div class="nav-links">
-            <a href="index.html" class="nav-link">🗺️ Live Map</a>
-            <a href="events.html" class="nav-link">⚠️ Disaster Events</a>
-            <a href="knowledge.html" class="nav-link">📖 Knowledge Base</a>
-            <a href="about.html" class="nav-link active">ℹ️ About Us</a>
+            <a href="index.html" class="nav-link">
+                <span>🗺️</span>
+                <span>Live Map</span>
+            </a>
+            <a href="analytics.html" class="nav-link">
+                <span>📊</span>
+                <span>Analytics Dashboard</span>
+            </a>
+            <a href="events.html" class="nav-link">
+                <span>⚠️</span>
+                <span>Disaster Events</span>
+            </a>
+            <a href="knowledge.html" class="nav-link">
+                <span>📖</span>
+                <span>Knowledge Base</span>
+            </a>
+            <a href="about.html" class="nav-link active">
+                <span>ℹ️</span>
+                <span>About Us</span>
+            </a>
         </div>
         <div class="nav-right-toolbar">
+            <a href="index.html#raw-data-modal" onclick="window.location.href='index.html'; setTimeout(() => openRawDataModal(), 300); return false;" class="btn-nav-amber" id="btn-raw-data" title="Inspect Database Datasets & Provenance">
+                <span>🗄️</span> Open Datasets
+            </a>
             <button class="btn-nav-purple" id="btn-pdf-download" onclick="downloadActionPlanPDF(1)">
-                <span id="pdf-icon">📄</span> Action Plan PDF
+                <span id="pdf-icon">📄</span> PDF
             </button>
             <button class="btn-nav-blue" id="btn-sync-ai" onclick="syncData()">
-                <span id="sync-icon">⚡</span> Sync AI
+                <span id="sync-icon">⚡</span> AI
             </button>
             <button class="btn-nav-teal" id="btn-refresh-logistics" onclick="refreshLogistics()">
-                <span id="refresh-icon">🔄</span> Refresh
+                <span id="refresh-icon">🔄</span>
             </button>
             <div class="nav-status-badge">
                 <span>LIVE TELEMETRY</span>
@@ -106,19 +125,19 @@
                 </div>
                 <div class="glass-card-body" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                     <div>
-                        <h4 style="color: #f8fafc; font-size: 14px; margin-bottom: 6px;">🗺️ Interactive GIS Command Map</h4>
-                        <p style="font-size: 13px;">Full-screen map supporting CartoDB Dark Canvas and Esri Satellite Imagery with dynamic continent filtering, depot markers, and animated route overlays.</p>
+                        <h4 style="color: #0f172a; font-weight: 700; font-size: 14px; margin-bottom: 6px;">🗺️ Interactive GIS Command Map</h4>
+                        <p style="font-size: 13px;">Full-screen map supporting Clean Light Canvas and Esri Satellite Imagery with dynamic continent filtering, depot markers, and animated route overlays.</p>
                     </div>
                     <div>
-                        <h4 style="color: #f8fafc; font-size: 14px; margin-bottom: 6px;">🤖 Multi-Target AI Relief Allocator</h4>
+                        <h4 style="color: #0f172a; font-weight: 700; font-size: 14px; margin-bottom: 6px;">🤖 Multi-Target AI Relief Allocator</h4>
                         <p style="font-size: 13px;">RandomForest machine learning predictions calculating water volume (liters), food packs, and operation completion time with Sphere Project standard fallbacks.</p>
                     </div>
                     <div>
-                        <h4 style="color: #f8fafc; font-size: 14px; margin-bottom: 6px;">🚨 Civilian SOS Distress Monitoring</h4>
+                        <h4 style="color: #0f172a; font-weight: 700; font-size: 14px; margin-bottom: 6px;">🚨 Civilian SOS Distress Monitoring</h4>
                         <p style="font-size: 13px;">Real-time distress signal tracking from mobile civilian apps with immediate depot dispatch assignment and priority routing.</p>
                     </div>
                     <div>
-                        <h4 style="color: #f8fafc; font-size: 14px; margin-bottom: 6px;">📄 One-Click Action Plan Export</h4>
+                        <h4 style="color: #0f172a; font-weight: 700; font-size: 14px; margin-bottom: 6px;">📄 One-Click Action Plan Export</h4>
                         <p style="font-size: 13px;">Automated executive PDF action plan report generation powered by fpdf2, including incident details, depot allocations, and emergency contact lists.</p>
                     </div>
                 </div>

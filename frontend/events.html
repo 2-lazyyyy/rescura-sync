@@ -9,30 +9,49 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
     <!-- Global CSS Stylesheet -->
-    <link rel="stylesheet" href="style.css?v=20260810">
+    <link rel="stylesheet" href="style.css?v=20260817-clean-light">
 </head>
 <body>
-    <!-- Fixed Global Navigation Bar -->
+        <!-- Fixed Global Navigation Bar -->
     <nav class="global-navbar">
         <a href="index.html" class="nav-brand">
             <span class="nav-brand-icon">🛡️</span>
             <span>RESCURA SYNC</span>
         </a>
         <div class="nav-links">
-            <a href="index.html" class="nav-link">🗺️ Live Map</a>
-            <a href="events.html" class="nav-link active">⚠️ Disaster Events</a>
-            <a href="knowledge.html" class="nav-link">📖 Knowledge Base</a>
-            <a href="about.html" class="nav-link">ℹ️ About Us</a>
+            <a href="index.html" class="nav-link">
+                <span>🗺️</span>
+                <span>Live Map</span>
+            </a>
+            <a href="analytics.html" class="nav-link">
+                <span>📊</span>
+                <span>Analytics Dashboard</span>
+            </a>
+            <a href="events.html" class="nav-link active">
+                <span>⚠️</span>
+                <span>Disaster Events</span>
+            </a>
+            <a href="knowledge.html" class="nav-link">
+                <span>📖</span>
+                <span>Knowledge Base</span>
+            </a>
+            <a href="about.html" class="nav-link">
+                <span>ℹ️</span>
+                <span>About Us</span>
+            </a>
         </div>
         <div class="nav-right-toolbar">
+            <a href="index.html#raw-data-modal" onclick="window.location.href='index.html'; setTimeout(() => openRawDataModal(), 300); return false;" class="btn-nav-amber" id="btn-raw-data" title="Inspect Database Datasets & Provenance">
+                <span>🗄️</span> Open Datasets
+            </a>
             <button class="btn-nav-purple" id="btn-pdf-download" onclick="downloadActionPlanPDF(1)">
-                <span id="pdf-icon">📄</span> Action Plan PDF
+                <span id="pdf-icon">📄</span> PDF
             </button>
             <button class="btn-nav-blue" id="btn-sync-ai" onclick="syncData()">
-                <span id="sync-icon">⚡</span> Sync AI
+                <span id="sync-icon">⚡</span> AI
             </button>
             <button class="btn-nav-teal" id="btn-refresh-logistics" onclick="refreshLogistics()">
-                <span id="refresh-icon">🔄</span> Refresh
+                <span id="refresh-icon">🔄</span>
             </button>
             <div class="nav-status-badge">
                 <span>LIVE TELEMETRY</span>
@@ -56,7 +75,7 @@
                 <span class="stat-value" id="evt-stat-total">0</span>
             </div>
             <div class="stat-widget" style="padding: 16px;">
-                <span class="stat-label">Severe Disasters (SEV 7+)</span>
+                <span class="stat-label">Severe Disasters (Rating 7+)</span>
                 <span class="stat-value stat-pending" id="evt-stat-severe">0</span>
             </div>
             <div class="stat-widget" style="padding: 16px;">
@@ -110,18 +129,28 @@
 
     <!-- Client-side Script for Events Table -->
     <script>
-        const API_HOSTS = [
-            window.location.origin.replace(':5500', ':8000'),
-            'http://127.0.0.1:8000',
-            'http://localhost:8000'
-        ];
+        let activeApiHost = sessionStorage.getItem('rescura_api_host') || 'http://127.0.0.1:8000';
+
+        function getCandidateHosts() {
+            const list = [];
+            if (window.location && window.location.origin && window.location.origin.startsWith('http')) {
+                list.push(window.location.origin);
+                list.push(window.location.origin.replace(/:\d+$/, ':8000'));
+            }
+            if (activeApiHost) {
+                list.push(activeApiHost);
+            }
+            list.push('http://127.0.0.1:8000', 'http://localhost:8000');
+            list.push('https://rescura-sync.onrender.com');
+            return Array.from(new Set(list.filter(Boolean)));
+        }
+
         let rawEventsData = [];
         let activeContinent = 'All';
         let searchQuery = '';
-        let activeApiHost = 'http://127.0.0.1:8000';
 
         function downloadActionPlanPDF(evtId = 1) {
-            const targetUrl = `${activeApiHost}/api/export-report/${evtId}`;
+            const targetUrl = `${activeApiHost}/api/export-report/${evtId || 1}`;
             window.open(targetUrl, '_blank');
         }
 
@@ -133,15 +162,40 @@
             loadEventsData();
         }
 
-        async function apiFetch(path) {
-            for (const host of API_HOSTS) {
+        async function apiFetch(path, options = {}) {
+            const timeoutMs = options.timeout || 1500;
+            const fetchOptions = { ...options };
+            delete fetchOptions.timeout;
+
+            if (activeApiHost) {
                 try {
-                    const res = await fetch(`${host}${path}`, { signal: AbortSignal.timeout(12000) });
-                    if (res.ok) {
+                    const controller = new AbortController();
+                    const timer = setTimeout(() => controller.abort(), timeoutMs);
+                    const url = `${activeApiHost}${path}`;
+                    const res = await fetch(url, { ...fetchOptions, signal: controller.signal });
+                    clearTimeout(timer);
+                    if (res && res.ok) return res;
+                } catch (e) {
+                    // try candidates
+                }
+            }
+
+            const hostsToTry = getCandidateHosts();
+            for (const host of hostsToTry) {
+                if (host === activeApiHost) continue;
+                try {
+                    const controller = new AbortController();
+                    const timer = setTimeout(() => controller.abort(), timeoutMs);
+                    const res = await fetch(`${host}${path}`, { ...fetchOptions, signal: controller.signal });
+                    clearTimeout(timer);
+                    if (res && res.ok) {
                         activeApiHost = host;
+                        sessionStorage.setItem('rescura_api_host', host);
                         return res;
                     }
-                } catch (e) {}
+                } catch (e) {
+                    // try next host
+                }
             }
             return null;
         }
@@ -193,9 +247,10 @@
 
         async function loadEventsData() {
             try {
-                const res = await apiFetch('/api/stream-disasters');
+                const res = await apiFetch('/api/dashboard-data');
                 if (res && res.ok) {
-                    rawEventsData = await res.json();
+                    const data = await res.json();
+                    rawEventsData = data.dashboard_data || data.data || [];
                 }
             } catch (e) {
                 console.error('Failed to load events:', e);
@@ -216,6 +271,77 @@
         function filterEventsTable() {
             searchQuery = document.getElementById('table-search').value.toLowerCase().trim();
             renderEventsTable();
+        }
+
+        function calculateClientETABreakdown(distKm, severity, title) {
+            const d = Math.max(0.1, parseFloat(distKm) || 0);
+            const sev = parseFloat(severity) || 5.0;
+            const titleLower = (title || '').toLowerCase();
+
+            const landTotal = (d * 1.3 / 50.0) + 0.5;
+            const landH = Math.floor(landTotal);
+            const landM = Math.round((landTotal - landH) * 60);
+
+            const airTotal = (d * 1.05 / 220.0) + 0.3;
+            const airH = Math.floor(airTotal);
+            const airM = Math.round((airTotal - airH) * 60);
+
+            const waterTotal = (d * 1.4 / 25.0) + 0.6;
+            const waterH = Math.floor(waterTotal);
+            const waterM = Math.round((waterTotal - waterH) * 60);
+
+            const isWater = ['flood', 'tsunami', 'cyclone', 'storm', 'river', 'sea', 'coastal', 'drowning'].some(k => titleLower.includes(k));
+            let recMode = 'land';
+            let rationale = '';
+
+            if (isWater && d <= 80) {
+                recMode = 'water';
+                rationale = `🚢 WATER/BOAT RECOMMENDED`;
+            } else if (sev >= 7.0 || d >= 120) {
+                recMode = 'air';
+                rationale = `🚁 AIR HELICOPTER RECOMMENDED`;
+            } else {
+                recMode = 'land';
+                rationale = `🚚 LAND CONVOY RECOMMENDED`;
+            }
+
+            return {
+                recommended_mode: recMode,
+                recommendation_rationale: rationale,
+                modes: {
+                    land: { formatted_time: `${landH}h ${landM}m` },
+                    air: { formatted_time: `${airH}h ${airM}m` },
+                    water: { formatted_time: `${waterH}h ${waterM}m` }
+                }
+            };
+        }
+
+        function calculateHaversineKm(lat1, lon1, lat2, lon2) {
+            const R = 6371.0;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c;
+        }
+
+        function getNearestDepotDistance(targetLat, targetLon) {
+            const lat = parseFloat(targetLat);
+            const lon = parseFloat(targetLon);
+            if (isNaN(lat) || isNaN(lon)) return 45.0;
+            const depots = [
+                { lat: 16.8661, lon: 96.1561 },
+                { lat: 19.7633, lon: 96.0785 },
+                { lat: 21.9588, lon: 96.0891 }
+            ];
+            let minDist = Infinity;
+            for (const d of depots) {
+                const dist = calculateHaversineKm(lat, lon, d.lat, d.lon);
+                if (dist < minDist) minDist = dist;
+            }
+            return minDist === Infinity ? 45.0 : Math.round(minDist * 100) / 100;
         }
 
         function renderEventsTable() {
@@ -282,73 +408,9 @@
                 const pred = evt.latest_prediction || (evt.predictions && evt.predictions[0]) || {};
                 const waterLiters = Math.round(pred.water_liters || evt.water_needed_liters || 15000);
                 const foodPacks = Math.round(pred.food_packs || evt.food_needed_packs || 2500);
-                function calculateClientETABreakdown(distKm, severity, title) {
-                    const d = Math.max(0.1, parseFloat(distKm) || 0);
-                    const sev = parseFloat(severity) || 5.0;
-                    const titleLower = (title || '').toLowerCase();
-
-                    const landTotal = (d * 1.3 / 50.0) + 0.5;
-                    const landH = Math.floor(landTotal);
-                    const landM = Math.round((landTotal - landH) * 60);
-
-                    const airTotal = (d * 1.05 / 220.0) + 0.3;
-                    const airH = Math.floor(airTotal);
-                    const airM = Math.round((airTotal - airH) * 60);
-
-                    const waterTotal = (d * 1.4 / 25.0) + 0.6;
-                    const waterH = Math.floor(waterTotal);
-                    const waterM = Math.round((waterTotal - waterH) * 60);
-
-                    const isWater = ['flood', 'tsunami', 'cyclone', 'storm', 'river', 'sea', 'coastal', 'drowning'].some(k => titleLower.includes(k));
-                    let recMode = 'land';
-                    let rationale = '';
-
-                    if (isWater && d <= 80) {
-                        recMode = 'water';
-                        rationale = `🚢 WATER/BOAT RECOMMENDED`;
-                    } else if (sev >= 7.0 || d >= 120) {
-                        recMode = 'air';
-                        rationale = `🚁 AIR HELICOPTER RECOMMENDED`;
-                    } else {
-                        recMode = 'land';
-                        rationale = `🚚 LAND CONVOY RECOMMENDED`;
-                    }
-
-                    return {
-                        recommended_mode: recMode,
-                        recommendation_rationale: rationale,
-                        modes: {
-                            land: { formatted_time: `${landH}h ${landM}m` },
-                            air: { formatted_time: `${airH}h ${airM}m` },
-                            water: { formatted_time: `${waterH}h ${waterM}m` }
-                        }
-                function calculateHaversineKm(lat1, lon1, lat2, lon2) {
-                    const R = 6371.0;
-                    const dLat = (lat2 - lat1) * Math.PI / 180;
-                    const dLon = (lon2 - lon1) * Math.PI / 180;
-                    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                              Math.sin(dLon / 2) * Math.sin(dLon / 2);
-                    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-                    return R * c;
-                }
-
-                function getNearestDepotDistance(targetLat, targetLon) {
-                    const lat = parseFloat(targetLat);
-                    const lon = parseFloat(targetLon);
-                    if (isNaN(lat) || isNaN(lon)) return 45.0;
-                    const depots = [
-                        { lat: 16.8661, lon: 96.1561 },
-                        { lat: 19.7633, lon: 96.0785 },
-                        { lat: 21.9588, lon: 96.0891 }
-                    ];
-                    let minDist = Infinity;
-                    for (const d of depots) {
-                        const dist = calculateHaversineKm(lat, lon, d.lat, d.lon);
-                        if (dist < minDist) minDist = dist;
-                    }
-                    return minDist === Infinity ? 45.0 : Math.round(minDist * 100) / 100;
-                }
+                const estBudget = (evt.total_estimated_budget_usd)
+                    ? evt.total_estimated_budget_usd
+                    : Math.round((waterLiters * 0.50) + (foodPacks * 3.50));
 
                 const distKm = (evt.nearest_depot && evt.nearest_depot.distance_km)
                     ? evt.nearest_depot.distance_km
@@ -359,33 +421,33 @@
 
                 const etaCellHtml = `
                     <div style="display: flex; flex-direction: column; gap: 3px; font-size: 11px;">
-                        <span style="color: ${eta.recommended_mode==='land'?'#fbbf24':'#cbd5e1'}; font-weight: ${eta.recommended_mode==='land'?'800':'500'}; background: ${eta.recommended_mode==='land'?'rgba(245, 158, 11, 0.15)':'transparent'}; padding: 1px 4px; border-radius: 4px;">🚚 <b>Land:</b> ${eta.modes.land.formatted_time}</span>
-                        <span style="color: ${eta.recommended_mode==='air'?'#fbbf24':'#cbd5e1'}; font-weight: ${eta.recommended_mode==='air'?'800':'500'}; background: ${eta.recommended_mode==='air'?'rgba(245, 158, 11, 0.15)':'transparent'}; padding: 1px 4px; border-radius: 4px;">🚁 <b>Air:</b> ${eta.modes.air.formatted_time}</span>
-                        <span style="color: ${eta.recommended_mode==='water'?'#fbbf24':'#cbd5e1'}; font-weight: ${eta.recommended_mode==='water'?'800':'500'}; background: ${eta.recommended_mode==='water'?'rgba(245, 158, 11, 0.15)':'transparent'}; padding: 1px 4px; border-radius: 4px;">🚢 <b>Water:</b> ${eta.modes.water.formatted_time}</span>
+                        <span style="color: ${eta.recommended_mode==='land'?'#b45309':'#475569'}; font-weight: ${eta.recommended_mode==='land'?'700':'500'}; background: ${eta.recommended_mode==='land'?'#fffbeb':'transparent'}; padding: 1px 6px; border-radius: 4px; ${eta.recommended_mode==='land'?'border: 1px solid #fde68a;':''}">🚚 <b>Land:</b> ${eta.modes.land.formatted_time}</span>
+                        <span style="color: ${eta.recommended_mode==='air'?'#b45309':'#475569'}; font-weight: ${eta.recommended_mode==='air'?'700':'500'}; background: ${eta.recommended_mode==='air'?'#fffbeb':'transparent'}; padding: 1px 6px; border-radius: 4px; ${eta.recommended_mode==='air'?'border: 1px solid #fde68a;':''}">🚁 <b>Air:</b> ${eta.modes.air.formatted_time}</span>
+                        <span style="color: ${eta.recommended_mode==='water'?'#b45309':'#475569'}; font-weight: ${eta.recommended_mode==='water'?'700':'500'}; background: ${eta.recommended_mode==='water'?'#fffbeb':'transparent'}; padding: 1px 6px; border-radius: 4px; ${eta.recommended_mode==='water'?'border: 1px solid #fde68a;':''}">🚢 <b>Water:</b> ${eta.modes.water.formatted_time}</span>
                     </div>
                 `;
 
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
-                    <td style="font-weight: 700; color: #f8fafc;">⚠️ ${title}</td>
+                    <td style="font-weight: 700; color: #0f172a;">⚠️ ${title}</td>
                     <td><span class="badge-tag blue">${cont}</span></td>
-                    <td style="font-family: monospace; color: var(--text-muted);">${lat.toFixed(3)}, ${lon.toFixed(3)}</td>
-                    <td style="color: var(--accent-action-purple); font-weight: 600;">🕒 ${timeStr}</td>
+                    <td style="font-family: monospace; color: #64748b;">${lat.toFixed(3)}, ${lon.toFixed(3)}</td>
+                    <td style="color: #7c3aed; font-weight: 600;">🕒 ${timeStr}</td>
                     <td>
-                        <span style="font-weight: 800; color: ${sev >= 7.0 ? 'var(--accent-alert-red)' : 'var(--accent-warning-yellow)'}; background: ${sev >= 7.0 ? 'rgba(255, 68, 68, 0.15)' : 'rgba(255, 204, 0, 0.15)'}; padding: 3px 8px; border-radius: 6px; border: 1px solid ${sev >= 7.0 ? 'rgba(255, 68, 68, 0.3)' : 'rgba(255, 204, 0, 0.3)'};">
-                            SEV ${sev}/10
+                        <span style="font-weight: 800; font-size: 11.5px; color: ${sev >= 7.0 ? '#b91c1c' : (sev >= 5.0 ? '#b45309' : '#15803d')}; background: ${sev >= 7.0 ? '#fef2f2' : (sev >= 5.0 ? '#fffbeb' : '#f0fdf4')}; padding: 3px 8px; border-radius: 6px; border: 1px solid ${sev >= 7.0 ? '#fecaca' : (sev >= 5.0 ? '#fde68a' : '#bbf7d0')};">
+                            ${sev}/10
                         </span>
                     </td>
-                    <td style="color: var(--accent-neon-blue); font-weight: 700;">${waterLiters.toLocaleString()} L</td>
-                    <td style="color: var(--accent-warning-yellow); font-weight: 700;">${foodPacks.toLocaleString()} Packs</td>
-                    <td style="color: var(--accent-green); font-weight: 800;">$${Math.round(estBudget).toLocaleString()} USD</td>
+                    <td style="color: #0284c7; font-weight: 700; font-family: monospace;">${waterLiters.toLocaleString()} L</td>
+                    <td style="color: #d97706; font-weight: 700; font-family: monospace;">${foodPacks.toLocaleString()} Packs</td>
+                    <td style="color: #16a34a; font-weight: 800; font-family: monospace;">$${Math.round(estBudget).toLocaleString()} USD</td>
                     <td>${etaCellHtml}</td>
                     <td>
                         <div style="display: flex; gap: 8px; align-items: center;">
-                            <a href="index.html?lat=${lat}&lon=${lon}&title=${encodeURIComponent(title)}&sev=${sev}" class="btn-nav-blue" style="padding: 4px 8px; font-size: 11px; text-decoration: none;">
+                            <a href="index.html?lat=${lat}&lon=${lon}&title=${encodeURIComponent(title)}&sev=${sev}" class="btn-nav-blue" style="padding: 4px 10px; font-size: 11px; text-decoration: none;">
                                 🗺️ Map
                             </a>
-                            <button onclick="downloadActionPlanPDF(${evtId})" class="btn-nav-purple" style="padding: 4px 8px; font-size: 11px;">
+                            <button onclick="downloadActionPlanPDF(${evt.id || 1})" class="btn-nav-purple" style="padding: 4px 10px; font-size: 11px;">
                                 📄 PDF
                             </button>
                         </div>

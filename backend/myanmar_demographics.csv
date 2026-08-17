@@ -1,21 +1,130 @@
-city,latitude,longitude,population
-Yangon,16.8661,96.1561,5458000
-Mandalay,21.9588,96.0891,1460000
-Naypyidaw,19.7633,96.0785,1160000
-Mawlamyine,16.4919,97.6256,491139
-Bago,17.3333,96.4833,288120
-Pathein,16.7750,94.7333,287071
-Monywa,22.1086,95.1358,207489
-Sittwe,20.1500,92.9000,181000
-Meiktila,20.8789,95.8583,177442
-Taunggyi,20.7833,97.0333,380665
-Myeik,12.4381,98.6022,284000
-Pyay,18.8242,95.2185,251643
-Lashio,22.9333,97.7500,174370
-Myitkyina,25.3833,97.4000,150000
-Hpa-An,16.8897,97.6347,126225
-Pyin Oo Lwin,22.0333,96.4667,255000
-Yenangyaung,20.4667,94.8833,110000
-Magway,20.1500,94.9167,300000
-Dawei,14.0833,98.2000,146900
-Tachileik,20.4481,99.8817,108000
+city,latitude,longitude,population,state_region
+Yangon (Downtown/CBD),16.7797,96.1594,360000,Yangon Region
+Hlaingtharya (Industrial Hub),16.8622,96.0667,687867,Yangon Region
+South Dagon,16.8500,96.2200,371646,Yangon Region
+North Dagon,16.8833,96.1833,203948,Yangon Region
+Insein,16.8978,96.0964,305283,Yangon Region
+Mingaladon,16.9667,96.1500,242100,Yangon Region
+Thanlyin (Port Corridor),16.7583,96.2500,268063,Yangon Region
+Kyauktan (Thilawa SEZ),16.6333,96.3167,160000,Yangon Region
+Twante,16.7167,95.9333,226834,Yangon Region
+Hmawbi,17.1000,96.0000,247600,Yangon Region
+Taikkyi,17.3167,95.9667,277200,Yangon Region
+Mandalay (City Core),21.9588,96.0891,1460000,Mandalay Region
+Chanayethazan,21.9750,96.0833,197175,Mandalay Region
+Chanmyathazi,21.9333,96.0833,283781,Mandalay Region
+Pyigyidagon,21.9000,96.0833,237698,Mandalay Region
+Amarapura (U Bein Corridor),21.9000,96.0500,237600,Mandalay Region
+Pyin Oo Lwin (Highland Base),22.0333,96.4667,255000,Mandalay Region
+Myingyan,21.4600,95.3900,276096,Mandalay Region
+Meiktila,20.8789,95.8583,309663,Mandalay Region
+Kyaukse,21.6044,96.1311,257900,Mandalay Region
+Thabeikkyin (Seismic Fault),22.8833,95.9833,125000,Mandalay Region
+Mogok (Ruby Valley),22.9167,96.5000,167000,Mandalay Region
+Yamethin,20.4333,96.1500,258000,Mandalay Region
+Kyaukpadaung (Mt Popa),20.8333,95.1333,260000,Mandalay Region
+Naypyidaw (Zabuthiri/Capital),19.7633,96.0785,1160000,Naypyidaw Union Territory
+Pyinmana,19.7333,96.2167,157000,Naypyidaw Union Territory
+Lewe,19.6333,96.1000,284000,Naypyidaw Union Territory
+Tatkone,20.1333,96.2000,218000,Naypyidaw Union Territory
+Bago (East Delta Hub),17.3333,96.4833,288120,Bago Region
+Taungoo (Sittaung River),18.9333,96.4333,264000,Bago Region
+Pyay (Ayeyarwady Bank),18.8242,95.2185,251643,Bago Region
+Nyaunglebin,17.9500,96.7333,152000,Bago Region
+Shwedaung,18.7000,95.2167,143000,Bago Region
+Tharrawaddy,17.6500,95.7833,165000,Bago Region
+Letpadan,17.7833,95.7500,172000,Bago Region
+Pathein (Delta Capital),16.7750,94.7333,287071,Ayeyarwady Region
+Hinthada,17.6500,95.4500,340000,Ayeyarwady Region
+Myaungmya,16.6000,94.9167,298000,Ayeyarwady Region
+Pyapon,16.2833,95.6833,214000,Ayeyarwady Region
+Bogale (Cyclone Surge Zone),16.3000,95.4000,320000,Ayeyarwady Region
+Labutta (Coastal Headland),16.1500,94.7667,315000,Ayeyarwady Region
+Maubin,16.7333,95.6500,312000,Ayeyarwady Region
+Ngapudaw (Cape Negrais),16.5333,94.6833,230000,Ayeyarwady Region
+Kyaiklat,16.4500,95.7333,195000,Ayeyarwady Region
+Monywa (Chindwin Valley),22.1086,95.1358,372095,Sagaing Region
+Sagaing (Fault Epicenter),21.8833,95.9667,306000,Sagaing Region
+Shwebo,22.5667,95.7000,268000,Sagaing Region
+Kale (Chindwin Basin),23.1833,94.0667,325000,Sagaing Region
+Katha (Upper Ayeyarwady),24.1667,96.3333,168000,Sagaing Region
+Tamu (India Border Gate),24.2167,94.3000,75000,Sagaing Region
+Hkamti (Upper Chindwin),25.9833,95.7000,48000,Sagaing Region
+Homalin,24.8667,94.9000,120000,Sagaing Region
+Magway (Central Arid Hub),20.1500,94.9167,300000,Magway Region
+Pakokku (Chindwin Confluence),21.3333,95.0833,310000,Magway Region
+Yenangyaung (Oilfield Zone),20.4667,94.8833,142000,Magway Region
+Chauk (2016 Seismic Center),20.8833,94.8167,135000,Magway Region
+Minbu,20.1833,94.8833,188000,Magway Region
+Taungdwingyi,20.0000,95.5333,260000,Magway Region
+Gangaw (Myittha River),22.1833,94.1333,137000,Magway Region
+Taunggyi (Shan Highland),20.7833,97.0333,380665,Shan State
+Lashio (Northern Plateau),22.9333,97.7500,269000,Shan State
+Muse (China Border Hub),23.9833,97.9000,130000,Shan State
+Tachileik (Golden Triangle),20.4481,99.8817,175000,Shan State
+Kengtung (Eastern Valley),21.2833,99.6000,171000,Shan State
+Kalaw (Highland Ridge),20.6333,96.5667,180000,Shan State
+Nyaungshwe (Inle Lake),20.6667,96.9333,190000,Shan State
+Kyaukme,22.5333,97.0500,175000,Shan State
+Hsipaw (Dokhtawady),22.6167,97.3000,135000,Shan State
+Tarlay (2011 Quake Zone),20.6667,99.9833,35000,Shan State
+Myitkyina (Kachin Capital),25.3833,97.4000,307000,Kachin State
+Bhamo (Ayeyarwady Gorge),24.2500,97.2333,145000,Kachin State
+Hpakant (Mining/Landslide Basin),25.6167,96.3167,180000,Kachin State
+Mohnyin (Indawgyi Lake),24.7833,96.3667,155000,Kachin State
+Putao (Himalayan Foothills),27.3333,97.4167,62000,Kachin State
+Sittwe (Bay of Bengal Port),20.1500,92.9000,210000,Rakhine State
+Kyaukpyu (Deep Sea Port SEZ),19.4333,93.5500,165000,Rakhine State
+Mrauk-U (Historic Valley),20.6000,93.2000,215000,Rakhine State
+Thandwe (Ngapali Coast),18.4667,94.3667,130000,Rakhine State
+Maungdaw (Border Corridor),20.8167,92.3667,240000,Rakhine State
+Kyauktaw (Kaladan River),20.8333,92.9667,172000,Rakhine State
+Mawlamyine (Thanlwin Port),16.4919,97.6256,491139,Mon State
+Thaton,16.9167,97.3667,238000,Mon State
+Mudon,16.2500,97.7167,192000,Mon State
+Ye (Southern Coastal Strip),15.2500,97.8667,263000,Mon State
+Kyaikto (Kyaiktiyo Ridge),17.3000,97.0167,185000,Mon State
+Hpa-An (Zwegabin Valley),16.8897,97.6347,421575,Kayin State
+Myawaddy (Thai Border Hub),16.6833,98.5167,210000,Kayin State
+Kawkareik,16.5500,98.2500,165000,Kayin State
+Papun (Thanlwin Gorge),18.0667,97.4500,52000,Kayin State
+Loikaw (Baluchaung Valley),19.6742,97.2094,128780,Kayah State
+Demoso,19.5333,97.1500,78000,Kayah State
+Bawlakhe,18.9833,97.3333,35000,Kayah State
+Hakha (Chin Mountain Capital),22.6467,93.6061,50000,Chin State
+Tedim (Kennedy Peak Corridor),23.3667,93.6500,88000,Chin State
+Falam,22.9167,93.6833,45000,Chin State
+Mindat (Southern Chin Ridge),21.3667,93.9667,52000,Chin State
+Paletwa (Kaladan Corridor),21.3000,92.8500,68000,Chin State
+Dawei (Andaman Coastal Hub),14.0833,98.2000,146900,Tanintharyi Region
+Myeik (Mergui Archipelago Port),12.4381,98.6022,284000,Tanintharyi Region
+Kawthaung (Victoria Point/Border),9.9833,98.5500,140000,Tanintharyi Region
+Bangkok (AHA Regional Hub),13.7563,100.5018,10539000,Thailand (ASEAN)
+Chiang Mai (Northern Hub),18.7883,98.9853,1200000,Thailand (ASEAN)
+Mae Sot (Border Logistics Hub),16.7167,98.5667,160000,Thailand (ASEAN)
+Phuket (Andaman Tsunami Zone),7.8804,98.3923,430000,Thailand (ASEAN)
+Jakarta (Java Sea Urban Basin),-6.2088,106.8456,10560000,Indonesia (ASEAN)
+Surabaya (East Java Sector),-7.2575,112.7521,2874000,Indonesia (ASEAN)
+Banda Aceh (Sumatra Tsunami Zone),5.5483,95.3238,270000,Indonesia (ASEAN)
+Padang (West Sumatra Quake Zone),-0.9492,100.3543,900000,Indonesia (ASEAN)
+Manila (Typhoon/Volcano Basin),14.5995,120.9842,13480000,Philippines (ASEAN)
+Davao (Mindanao Seismic Fault),7.1907,125.4578,1630000,Philippines (ASEAN)
+Cebu (Visayas Maritime Corridor),10.3157,123.8854,960000,Philippines (ASEAN)
+Hanoi (Red River Delta),21.0285,105.8542,8050000,Vietnam (ASEAN)
+Ho Chi Minh City (Mekong Delta Hub),10.8231,106.6297,9000000,Vietnam (ASEAN)
+Da Nang (Central Coastal Typhoon Zone),16.0544,108.2022,1130000,Vietnam (ASEAN)
+Phnom Penh (Mekong Basin Hub),11.5564,104.9282,2280000,Cambodia (ASEAN)
+Siem Reap (Tonle Sap Basin),13.3671,103.8448,245000,Cambodia (ASEAN)
+Vientiane (Mekong River Capital),17.9757,102.6331,950000,Laos (ASEAN)
+Luang Prabang (Northern Valley),19.8833,102.1333,65000,Laos (ASEAN)
+Kuala Lumpur (Peninsular Hub),3.1390,101.6869,1800000,Malaysia (ASEAN)
+Singapore (Changi Logistics Gateway),1.3521,103.8198,5900000,Singapore (ASEAN)
+Dhaka (Bengal Delta Megacity),23.8103,90.4125,22478000,South Asia (Regional)
+Chittagong (Bay of Bengal Port),22.3569,91.7832,5250000,South Asia (Regional)
+Cox's Bazar (Coastal Storm Surge),21.4272,92.0058,400000,South Asia (Regional)
+Kolkata (Ganges-Brahmaputra Delta),22.5726,88.3639,14850000,South Asia (Regional)
+Guwahati (Brahmaputra Flood Basin),26.1445,91.7362,1116000,South Asia (Regional)
+Kunming (Yunnan Seismic Gateway),25.0389,102.7183,8460000,East Asia (Regional)
+Chengdu (Sichuan Seismic Zone),30.5728,104.0668,20937000,East Asia (Regional)
+Tokyo (Kanto Subduction Zone),35.6762,139.6503,14000000,East Asia (Regional)
+Taipei (Pacific Ring of Fire),25.0330,121.5654,2600000,East Asia (Regional)

@@ -122,11 +122,13 @@ async def train_rescue_model(db: AsyncSession) -> Dict[str, Any]:
     X = df[['latitude', 'longitude', 'severity']].fillna(0)
     y = df[['water_used_liters', 'food_used_packs', 'rescue_time_hours']].fillna(0)
 
-    model = RandomForestRegressor(n_estimators=20, n_jobs=-1, random_state=42)
+    model = RandomForestRegressor(n_estimators=20, n_jobs=1, random_state=42)
     model.fit(X, y)
 
     os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
     joblib.dump(model, MODEL_PATH)
+    global _cached_model
+    _cached_model = model
     print(f"Rescue Logistics RandomForest model trained on geographic features and saved to {MODEL_PATH}")
 
     return {
@@ -158,24 +160,25 @@ def predict_rescue_needs(severity: float, affected_people: int = 5000, lat: floa
     Loads rescue_logistics_model.joblib and predicts required water (L), food (packs),
     and distance-based estimated rescue time (hours).
     """
-    from sklearn.ensemble import RandomForestRegressor
     from services.depot_service import find_nearest_depot
+    from routing import calculate_multimodal_eta
+    from sklearn.ensemble import RandomForestRegressor
 
     model = get_rescue_model()
     if model is None:
-        # Fallback baseline model fitting if joblib file is not pre-generated
+        # Fast baseline model initialization
         np.random.seed(42)
         X_mock = pd.DataFrame({
-            'latitude': np.random.uniform(9.0, 29.0, 100),
-            'longitude': np.random.uniform(92.0, 102.0, 100),
-            'severity': np.random.uniform(2.0, 10.0, 100)
+            'latitude': np.random.uniform(9.0, 29.0, 50),
+            'longitude': np.random.uniform(92.0, 102.0, 50),
+            'severity': np.random.uniform(2.0, 10.0, 50)
         })
         y_mock = pd.DataFrame({
             'water_used_liters': X_mock['severity'] * 5000.0 * 2.2,
             'food_used_packs': X_mock['severity'] * 5000.0 * 1.5,
             'rescue_time_hours': 1.5 + (5000.0 / 300.0) + (X_mock['severity'] * 0.8)
         })
-        model = RandomForestRegressor(n_estimators=50, random_state=42)
+        model = RandomForestRegressor(n_estimators=10, n_jobs=1, random_state=42)
         model.fit(X_mock, y_mock)
         os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
         joblib.dump(model, MODEL_PATH)
@@ -208,7 +211,6 @@ def predict_rescue_needs(severity: float, affected_people: int = 5000, lat: floa
     food_packs = max(50.0, float(preds[1]))
 
     # Spatial Distance & Multi-Modal Travel Time Calculation
-    from routing import calculate_multimodal_eta
     depot_info = find_nearest_depot(float(lat), float(lon))
     distance_km = float(depot_info.get("distance_km", 10.0))
 

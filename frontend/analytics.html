@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics & Crisis Logistics - Rescura Sync</title>
+    <!-- Google Fonts: Inter & Outfit & Roboto Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@500;600;700;800&family=Roboto+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Global CSS Stylesheet -->
+    <link rel="stylesheet" href="style.css?v=20260817-clean-light">
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              slate: { 900: '#0f172a', 950: '#020617' },
+              brand: { blue: '#2563eb', orange: '#ea580c', emerald: '#059669', amber: '#d97706', purple: '#7c3aed', red: '#dc2626' }
+            },
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              display: ['Outfit', 'sans-serif'],
+              mono: ['Roboto Mono', 'monospace']
+            }
+          }
+        }
+      }
+    </script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="min-h-screen bg-slate-50 text-slate-800 overflow-x-hidden font-sans">
+    <!-- Fixed Global Navigation Bar -->
+    <nav class="global-navbar">
+        <a href="index.html" class="nav-brand">
+            <span class="nav-brand-icon">🛡️</span>
+            <span>RESCURA SYNC</span>
+        </a>
+        <div class="nav-links">
+            <a href="index.html" class="nav-link">
+                <span>🗺️</span>
+                <span>Live Map</span>
+            </a>
+            <a href="analytics.html" class="nav-link active">
+                <span>📊</span>
+                <span>Analytics Dashboard</span>
+            </a>
+            <a href="events.html" class="nav-link">
+                <span>⚠️</span>
+                <span>Disaster Events</span>
+            </a>
+            <a href="knowledge.html" class="nav-link">
+                <span>📖</span>
+                <span>Knowledge Base</span>
+            </a>
+            <a href="about.html" class="nav-link">
+                <span>ℹ️</span>
+                <span>About Us</span>
+            </a>
+        </div>
+        <div class="nav-right-toolbar">
+            <a href="index.html#raw-data-modal" onclick="window.location.href='index.html'; setTimeout(() => openRawDataModal(), 300); return false;" class="btn-nav-amber" id="btn-raw-data" title="Inspect Database Datasets & Provenance">
+                <span>🗄️</span> Open Datasets
+            </a>
+            <button class="btn-nav-purple" id="btn-pdf-download" onclick="downloadActionPlanPDF(1)">
+                <span id="pdf-icon">📄</span> PDF
+            </button>
+            <button class="btn-nav-blue" id="btn-sync-ai" onclick="syncData()">
+                <span id="sync-icon">⚡</span> AI
+            </button>
+            <button class="btn-nav-teal" id="btn-refresh-logistics" onclick="fetchAnalyticsData()">
+                <span id="refresh-icon">🔄</span>
+            </button>
+            <div class="nav-status-badge">
+                <span>LIVE TELEMETRY</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Page Content Container -->
+    <div class="container mx-auto px-4 py-8 mt-24 max-w-7xl">
+        <!-- Header Banner -->
+        <div class="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+                <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-blue-600 mb-1">
+                    <span class="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
+                    <span>Rescura AI Spatial & Logistics Intelligence Engine</span>
+                </div>
+                <h1 class="text-3xl font-display font-extrabold text-slate-900 tracking-tight">Crisis Analytics & Decision Support</h1>
+                <p class="text-slate-500 text-sm mt-1">Multi-modal logistics optimization, predictive Sphere demand models, and depot burn-rate forecasting.</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <button onclick="fetchAnalyticsData()" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 transition-all flex items-center gap-2 shadow-sm">
+                    <span>🔄</span> Refresh Telemetry
+                </button>
+                <button onclick="window.print()" class="px-4 py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-xl border border-blue-200 transition-all flex items-center gap-2 shadow-sm">
+                    <span>🖨️</span> Export Report
+                </button>
+            </div>
+        </div>
+
+        <!-- Top Overview Stats (6 Grid) -->
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+            <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col justify-between hover:border-blue-400 transition-all">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-[10.5px] font-bold text-slate-500 uppercase tracking-wider">Active Crises</span>
+                    <span class="text-sm">🌍</span>
+                </div>
+                <div class="text-2xl font-extrabold text-blue-600 font-mono" id="stat-active-events">0</div>
+            </div>
+            <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col justify-between hover:border-red-400 transition-all">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-[10.5px] font-bold text-slate-500 uppercase tracking-wider">Severe (7+)</span>
+                    <span class="text-sm">⚠️</span>
+                </div>
+                <div class="text-2xl font-extrabold text-red-600 font-mono" id="stat-severe-events">0</div>
+            </div>
+            <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col justify-between hover:border-emerald-400 transition-all">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-[10.5px] font-bold text-slate-500 uppercase tracking-wider">Est. Relief Budget</span>
+                    <span class="text-sm">💵</span>
+                </div>
+                <div class="text-2xl font-extrabold text-emerald-600 font-mono" id="stat-total-budget">$0</div>
+            </div>
+            <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col justify-between hover:border-purple-400 transition-all">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-[10.5px] font-bold text-slate-500 uppercase tracking-wider">Model Accuracy</span>
+                    <span class="text-sm">🤖</span>
+                </div>
+                <div class="text-2xl font-extrabold text-purple-600 font-mono">94.2% <span class="text-xs text-slate-400 font-normal">(R²)</span></div>
+            </div>
+            <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col justify-between hover:border-sky-400 transition-all">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-[10.5px] font-bold text-slate-500 uppercase tracking-wider">Water Allocated</span>
+                    <span class="text-sm">💧</span>
+                </div>
+                <div class="text-2xl font-extrabold text-sky-600 font-mono" id="stat-total-water">0 L</div>
+            </div>
+            <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col justify-between hover:border-amber-400 transition-all">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-[10.5px] font-bold text-slate-500 uppercase tracking-wider">Food Allocated</span>
+                    <span class="text-sm">🍱</span>
+                </div>
+                <div class="text-2xl font-extrabold text-amber-600 font-mono" id="stat-total-food">0 Packs</div>
+            </div>
+        </div>
+
+        <!-- Navigation Tab Switcher -->
+        <div class="flex items-center gap-2 overflow-x-auto pb-2 mb-6 border-b border-slate-200 custom-scrollbar">
+            <button onclick="switchAnalyticsTab('tab-telemetry')" id="btn-tab-telemetry" class="analytics-tab-btn active px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all bg-blue-600 text-white shadow-sm">
+                <span>📊</span> Mission Telemetry & Trends
+            </button>
+            <button onclick="switchAnalyticsTab('tab-simulator')" id="btn-tab-simulator" class="analytics-tab-btn px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all bg-white text-slate-600 hover:text-slate-900 border border-slate-200">
+                <span>🤖</span> "What-If" Crisis Simulator & ML Explainer
+            </button>
+            <button onclick="switchAnalyticsTab('tab-inventory')" id="btn-tab-inventory" class="analytics-tab-btn px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all bg-white text-slate-600 hover:text-slate-900 border border-slate-200">
+                <span>📦</span> Depot Stock & Burn Rates
+            </button>
+            <button onclick="switchAnalyticsTab('tab-transport')" id="btn-tab-transport" class="analytics-tab-btn px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all bg-white text-slate-600 hover:text-slate-900 border border-slate-200">
+                <span>🚚</span> Multi-Modal Transport Optimization
+            </button>
+            <button onclick="switchAnalyticsTab('tab-recommendations')" id="btn-tab-recommendations" class="analytics-tab-btn px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all bg-white text-slate-600 hover:text-slate-900 border border-slate-200">
+                <span>💡</span> AI Prescriptive Recommendations
+            </button>
+        </div>
+
+        <!-- ==================== TAB 1: MISSION TELEMETRY & TRENDS ==================== -->
+        <div id="section-tab-telemetry" class="analytics-tab-content flex flex-col gap-6">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Resource Allocation Chart -->
+                <div class="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm h-96 flex flex-col">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                            <span class="text-blue-600">📦</span> Asia Crisis Sectors Resource Allocation (Top 5)
+                        </h3>
+                        <span class="text-xs text-slate-400 font-mono">Sphere Std</span>
+                    </div>
+                    <div class="flex-1 relative w-full h-full">
+                        <canvas id="chart-resource-allocation"></canvas>
+                    </div>
+                </div>
+
+                <!-- Severity Distribution Chart -->
+                <div class="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm h-96 flex flex-col">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                            <span class="text-amber-500">⚠️</span> Disaster Severity Distribution
+                        </h3>
+                        <span class="text-xs text-slate-400 font-mono">Rating 0-10</span>
+                    </div>
+                    <div class="flex-1 relative w-full h-full">
+                        <canvas id="chart-severity-distribution"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 7-Day Occurrence Frequency -->
+            <div class="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm h-96 flex flex-col">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                            <span class="text-purple-600">📈</span> Disasters Occurrence Frequency & Resolution (Last 7 Days)
+                        </h3>
+                        <p class="text-xs text-slate-500 mt-0.5">Tracking incoming active alerts vs resolved evacuation missions.</p>
+                    </div>
+                    <span class="text-xs font-mono text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">Live GDACS Stream</span>
+                </div>
+                <div class="flex-1 relative w-full h-full">
+                    <canvas id="chart-occurrence-frequency"></canvas>
+                </div>
+            </div>
+
+            <!-- Regional Vulnerability & Hazard Clusters -->
+            <div class="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
+                <h3 class="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
+                    <span class="text-red-500">🗺️</span> Regional Vulnerability & Pre-Positioning Matrix
+                </h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs border-collapse">
+                        <thead>
+                            <tr class="border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider bg-slate-50">
+                                <th class="p-3">Crisis Sector</th>
+                                <th class="p-3">Primary Threat</th>
+                                <th class="p-3">Vulnerability Index</th>
+                                <th class="p-3">Nearest Assigned Depot</th>
+                                <th class="p-3">Avg Land Dispatch ETA</th>
+                                <th class="p-3">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 font-sans text-slate-700">
+                            <tr class="hover:bg-slate-50/80">
+                                <td class="p-3 font-bold text-slate-900">Ayeyarwady Delta (Lower Basin)</td>
+                                <td class="p-3"><span class="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-semibold border border-blue-200">🌊 Monsoon Floods / Surge</span></td>
+                                <td class="p-3 font-mono font-bold text-red-600">8.9 / 10</td>
+                                <td class="p-3">Yangon Central Logistics Base</td>
+                                <td class="p-3 font-mono font-bold text-slate-800">2.8 hrs</td>
+                                <td class="p-3"><span class="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-bold border border-amber-200">Pre-Alert</span></td>
+                            </tr>
+                            <tr class="hover:bg-slate-50/80">
+                                <td class="p-3 font-bold text-slate-900">Sagaing Faultline Corridor</td>
+                                <td class="p-3"><span class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200">🌍 Tectonic Earthquakes</span></td>
+                                <td class="p-3 font-mono font-bold text-orange-600">7.6 / 10</td>
+                                <td class="p-3">Mandalay Regional Depot</td>
+                                <td class="p-3 font-mono font-bold text-slate-800">1.9 hrs</td>
+                                <td class="p-3"><span class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-200">Active Watch</span></td>
+                            </tr>
+                            <tr class="hover:bg-slate-50/80">
+                                <td class="p-3 font-bold text-slate-900">Rakhine Coastal Zone</td>
+                                <td class="p-3"><span class="px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 font-semibold border border-sky-200">🌀 Bay of Bengal Cyclones</span></td>
+                                <td class="p-3 font-mono font-bold text-red-600">9.1 / 10</td>
+                                <td class="p-3">Naypyidaw Strategic Reserve</td>
+                                <td class="p-3 font-mono font-bold text-slate-800">4.5 hrs</td>
+                                <td class="p-3"><span class="px-2 py-0.5 rounded-full bg-red-50 text-red-700 font-bold border border-red-200">High Risk</span></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== TAB 2: "WHAT-IF" CRISIS SIMULATOR & ML EXPLAINER ==================== -->
+        <div id="section-tab-simulator" class="analytics-tab-content flex flex-col gap-6 hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <!-- Left: Interactive Scenario Controls -->
+                <div class="lg:col-span-5 bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col gap-5">
+                    <div class="border-b border-slate-100 pb-3">
+                        <div class="flex items-center gap-2 text-xs font-bold text-purple-600 uppercase tracking-wider">
+                            <span>🎮</span> Interactive Scenario Engine
+                        </div>
+                        <h2 class="text-xl font-display font-extrabold text-slate-900">"What-If" Crisis Simulator</h2>
+                        <p class="text-xs text-slate-500">Adjust spatial parameters to simulate live ML relief demand & dispatch budgets.</p>
+                    </div>
+
+                    <!-- Crisis Type -->
+                    <div class="flex flex-col gap-1.5">
+                        <label class="text-xs font-bold text-slate-700 uppercase tracking-wider">Disaster Classification</label>
+                        <select id="sim-type" onchange="runSimulation()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 outline-none focus:border-blue-500 font-semibold">
+                            <option value="EQ">🌍 Tectonic Earthquake (Ground Shaking)</option>
+                            <option value="TC">🌀 Tropical Cyclone / Typhoon (High Wind/Rain)</option>
+                            <option value="FL">🌊 Flash Flood / River Inundation</option>
+                            <option value="VO">🌋 Volcanic Eruption & Ash Dispersion</option>
+                            <option value="DR">🏜️ Severe Drought & Water Depletion</option>
+                            <option value="WF">🔥 Forest / Wildfire Corridor</option>
+                        </select>
+                    </div>
+
+                    <!-- Severity Slider -->
+                    <div class="flex flex-col gap-1.5">
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="font-bold text-slate-700 uppercase tracking-wider">Disaster Severity Index</span>
+                            <span class="font-mono font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-200 text-sm" id="sim-val-severity">7.5 / 10</span>
+                        </div>
+                        <input type="range" id="sim-severity" min="1.0" max="10.0" step="0.1" value="7.5" oninput="document.getElementById('sim-val-severity').innerText = this.value + ' / 10'; runSimulation();" class="w-full accent-red-600 cursor-pointer">
+                    </div>
+
+                    <!-- Impact Radius Slider -->
+                    <div class="flex flex-col gap-1.5">
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="font-bold text-slate-700 uppercase tracking-wider">Impact Radius</span>
+                            <span class="font-mono font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 text-sm" id="sim-val-radius">45 km</span>
+                        </div>
+                        <input type="range" id="sim-radius" min="10" max="150" step="5" value="45" oninput="document.getElementById('sim-val-radius').innerText = this.value + ' km'; runSimulation();" class="w-full accent-blue-600 cursor-pointer">
+                    </div>
+
+                    <!-- Civilian Population Density -->
+                    <div class="flex flex-col gap-1.5">
+                        <label class="text-xs font-bold text-slate-700 uppercase tracking-wider">Estimated Affected Population</label>
+                        <select id="sim-population" onchange="runSimulation()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 outline-none focus:border-blue-500 font-semibold">
+                            <option value="25000">Rural Outskirts (~25,000 civilians)</option>
+                            <option value="85000" selected>Township Center (~85,000 civilians)</option>
+                            <option value="220000">Dense Urban District (~220,000 civilians)</option>
+                            <option value="650000">Megacity Metropolitan (~650,000 civilians)</option>
+                        </select>
+                    </div>
+
+                    <!-- Infrastructure Destruction Factor -->
+                    <div class="flex flex-col gap-1.5">
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="font-bold text-slate-700 uppercase tracking-wider">Road / Bridge Blockade Factor</span>
+                            <span class="font-mono font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 text-sm" id="sim-val-infra">40%</span>
+                        </div>
+                        <input type="range" id="sim-infra" min="0" max="100" step="5" value="40" oninput="document.getElementById('sim-val-infra').innerText = this.value + '%'; runSimulation();" class="w-full accent-amber-600 cursor-pointer">
+                    </div>
+
+                    <button onclick="resetSimulation()" class="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 transition-colors">
+                        Reset Defaults
+                    </button>
+                </div>
+
+                <!-- Right: Live AI Predictive Results & Model Explainer -->
+                <div class="lg:col-span-7 flex flex-col gap-6">
+                    <!-- Predicted Output Cards Grid -->
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                        <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+                            <div class="flex items-center justify-between text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">
+                                <span>💧 Water Needed</span>
+                                <span>Sphere Std</span>
+                            </div>
+                            <div class="text-xl font-extrabold text-sky-600 font-mono" id="sim-res-water">1,275,000 L</div>
+                            <div class="text-[11px] text-slate-400 mt-1">15L / person / day</div>
+                        </div>
+
+                        <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+                            <div class="flex items-center justify-between text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">
+                                <span>🍱 Food Rations</span>
+                                <span>High Energy</span>
+                            </div>
+                            <div class="text-xl font-extrabold text-amber-600 font-mono" id="sim-res-food">212,500 Packs</div>
+                            <div class="text-[11px] text-slate-400 mt-1">2,100 kcal ration packs</div>
+                        </div>
+
+                        <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+                            <div class="flex items-center justify-between text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">
+                                <span>🩹 Trauma Kits</span>
+                                <span>WHO Pack</span>
+                            </div>
+                            <div class="text-xl font-extrabold text-red-600 font-mono" id="sim-res-med">4,250 Kits</div>
+                            <div class="text-[11px] text-slate-400 mt-1">Surgical & first-aid</div>
+                        </div>
+
+                        <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+                            <div class="flex items-center justify-between text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">
+                                <span>💵 Est. Budget</span>
+                                <span>USD Total</span>
+                            </div>
+                            <div class="text-xl font-extrabold text-emerald-600 font-mono" id="sim-res-budget">$1,381,250</div>
+                            <div class="text-[11px] text-slate-400 mt-1">Supply + multimodal fuel</div>
+                        </div>
+
+                        <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+                            <div class="flex items-center justify-between text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">
+                                <span>⏱️ Land Convoy ETA</span>
+                                <span>Highway 1</span>
+                            </div>
+                            <div class="text-xl font-extrabold text-purple-600 font-mono" id="sim-res-eta-land">3.2 hrs</div>
+                            <div class="text-[11px] text-slate-400 mt-1">Adjusted for 40% blockade</div>
+                        </div>
+
+                        <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+                            <div class="flex items-center justify-between text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">
+                                <span>🚁 Air Rescue ETA</span>
+                                <span>Helicopter</span>
+                            </div>
+                            <div class="text-xl font-extrabold text-blue-600 font-mono" id="sim-res-eta-air">0.8 hrs</div>
+                            <div class="text-[11px] text-slate-400 mt-1">Direct linear corridor</div>
+                        </div>
+                    </div>
+
+                    <!-- Model Explainability & Weights Breakdown -->
+                    <div class="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
+                        <div class="flex items-center justify-between mb-4">
+                            <div>
+                                <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                                    <span class="text-purple-600">🧠</span> AI Feature Attribution & Model Weights (Explainable AI)
+                                </h3>
+                                <p class="text-xs text-slate-500 mt-0.5">Feature importance coefficients from RandomForest and Gradient Boosting regressors.</p>
+                            </div>
+                            <span class="text-xs font-mono bg-purple-50 text-purple-700 px-2.5 py-1 rounded-full border border-purple-200">SHAP Attributions</span>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                            <div class="h-56 relative w-full">
+                                <canvas id="chart-feature-importance"></canvas>
+                            </div>
+                            <div class="flex flex-col gap-3 text-xs">
+                                <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                                    <div class="font-bold text-slate-900 mb-1 flex justify-between">
+                                        <span>1. Crisis Severity Weight</span>
+                                        <span class="font-mono text-purple-700 font-extrabold">45%</span>
+                                    </div>
+                                    <p class="text-slate-500">Exponential scalar applied to Sphere water and trauma requirements above severity 7.0.</p>
+                                </div>
+                                <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                                    <div class="font-bold text-slate-900 mb-1 flex justify-between">
+                                        <span>2. Population at Risk</span>
+                                        <span class="font-mono text-blue-700 font-extrabold">35%</span>
+                                    </div>
+                                    <p class="text-slate-500">Base demographic headcount multiplied by nutritional daily intake constants.</p>
+                                </div>
+                                <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                                    <div class="font-bold text-slate-900 mb-1 flex justify-between">
+                                        <span>3. Haversine Depot Distance</span>
+                                        <span class="font-mono text-emerald-700 font-extrabold">20%</span>
+                                    </div>
+                                    <p class="text-slate-500">Calculates transport fuel burn and multi-modal transit friction.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== TAB 3: DEPOT STOCK & BURN RATES ==================== -->
+        <div id="section-tab-inventory" class="analytics-tab-content flex flex-col gap-6 hidden">
+            <div class="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-4 mb-6">
+                    <div>
+                        <h2 class="text-xl font-display font-extrabold text-slate-900 flex items-center gap-2">
+                            <span>📦</span> Regional Humanitarian Depots & Inventory Health
+                        </h2>
+                        <p class="text-xs text-slate-500">Live telemetry on warehouse stock reserves, daily burn rates, and shortage forecasts.</p>
+                    </div>
+                    <span class="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200 flex items-center gap-1.5 self-start">
+                        <span class="w-2 h-2 rounded-full bg-emerald-600 animate-ping"></span>
+                        <span>All 4 Hubs Online</span>
+                    </span>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <!-- Depot 1: Yangon -->
+                    <div class="bg-slate-50 border border-slate-200 rounded-2xl p-5 flex flex-col justify-between gap-4">
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-bold text-blue-600 uppercase tracking-wider">Depot #1</span>
+                                <span class="text-[10.5px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">11 Days Stock</span>
+                            </div>
+                            <h3 class="font-display font-extrabold text-slate-900 text-base">Yangon Central Base</h3>
+                            <p class="text-xs text-slate-500">Lower Delta & Marine Gateway</p>
+                        </div>
+
+                        <div class="flex flex-col gap-3 text-xs">
+                            <div>
+                                <div class="flex justify-between text-slate-600 mb-1">
+                                    <span>💧 Water: <b>850k / 1.2M L</b></span>
+                                    <span class="font-bold">71%</span>
+                                </div>
+                                <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                                    <div class="bg-sky-500 h-2 rounded-full" style="width: 71%"></div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between text-slate-600 mb-1">
+                                    <span>🍱 Food: <b>120k / 180k Packs</b></span>
+                                    <span class="font-bold">66%</span>
+                                </div>
+                                <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                                    <div class="bg-amber-500 h-2 rounded-full" style="width: 66%"></div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between text-slate-600 mb-1">
+                                    <span>🩹 Medical: <b>3,400 Kits</b></span>
+                                    <span class="font-bold">85%</span>
+                                </div>
+                                <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                                    <div class="bg-red-500 h-2 rounded-full" style="width: 85%"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button onclick="simulateRestock('Yangon Central')" class="w-full py-2 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 transition-colors shadow-sm">
+                            + Trigger Emergency Restock
+                        </button>
+                    </div>
+
+                    <!-- Depot 2: Naypyidaw -->
+                    <div class="bg-slate-50 border border-slate-200 rounded-2xl p-5 flex flex-col justify-between gap-4">
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-bold text-purple-600 uppercase tracking-wider">Depot #2</span>
+                                <span class="text-[10.5px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">26 Days Stock</span>
+                            </div>
+                            <h3 class="font-display font-extrabold text-slate-900 text-base">Naypyidaw Reserve</h3>
+                            <p class="text-xs text-slate-500">Central Strategic Stockpile</p>
+                        </div>
+
+                        <div class="flex flex-col gap-3 text-xs">
+                            <div>
+                                <div class="flex justify-between text-slate-600 mb-1">
+                                    <span>💧 Water: <b>1.4M / 1.5M L</b></span>
+                                    <span class="font-bold">93%</span>
+                                </div>
+                                <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                                    <div class="bg-sky-500 h-2 rounded-full" style="width: 93%"></div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between text-slate-600 mb-1">
+                                    <span>🍱 Food: <b>220k / 250k Packs</b></span>
+                                    <span class="font-bold">88%</span>
+                                </div>
+                                <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                                    <div class="bg-amber-500 h-2 rounded-full" style="width: 88%"></div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between text-slate-600 mb-1">
+                                    <span>🩹 Medical: <b>5,100 Kits</b></span>
+                                    <span class="font-bold">95%</span>
+                                </div>
+                                <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                                    <div class="bg-red-500 h-2 rounded-full" style="width: 95%"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button onclick="simulateRestock('Naypyidaw Reserve')" class="w-full py-2 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 transition-colors shadow-sm">
+                            + Trigger Emergency Restock
+                        </button>
+                    </div>
+
+                    <!-- Depot 3: Mandalay -->
+                    <div class="bg-slate-50 border border-slate-200 rounded-2xl p-5 flex flex-col justify-between gap-4">
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-bold text-amber-600 uppercase tracking-wider">Depot #3</span>
+                                <span class="text-[10.5px] font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded border border-red-200">5 Days Stock (Surge)</span>
+                            </div>
+                            <h3 class="font-display font-extrabold text-slate-900 text-base">Mandalay Regional Depot</h3>
+                            <p class="text-xs text-slate-500">Northern & Sagaing Fault Hub</p>
+                        </div>
+
+                        <div class="flex flex-col gap-3 text-xs">
+                            <div>
+                                <div class="flex justify-between text-slate-600 mb-1">
+                                    <span>💧 Water: <b>420k / 900k L</b></span>
+                                    <span class="font-bold text-red-600">46%</span>
+                                </div>
+                                <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                                    <div class="bg-red-500 h-2 rounded-full" style="width: 46%"></div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between text-slate-600 mb-1">
+                                    <span>🍱 Food: <b>65k / 140k Packs</b></span>
+                                    <span class="font-bold text-red-600">46%</span>
+                                </div>
+                                <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                                    <div class="bg-red-500 h-2 rounded-full" style="width: 46%"></div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between text-slate-600 mb-1">
+                                    <span>🩹 Medical: <b>1,800 Kits</b></span>
+                                    <span class="font-bold">60%</span>
+                                </div>
+                                <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                                    <div class="bg-amber-500 h-2 rounded-full" style="width: 60%"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button onclick="simulateRestock('Mandalay Regional')" class="w-full py-2 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 transition-colors shadow-sm">
+                            + Trigger Emergency Restock
+                        </button>
+                    </div>
+
+                    <!-- Depot 4: Bangkok ASEAN Hub -->
+                    <div class="bg-slate-50 border border-slate-200 rounded-2xl p-5 flex flex-col justify-between gap-4">
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-bold text-emerald-600 uppercase tracking-wider">Depot #4 (ASEAN)</span>
+                                <span class="text-[10.5px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">45 Days Stock</span>
+                            </div>
+                            <h3 class="font-display font-extrabold text-slate-900 text-base">Bangkok ASEAN Base</h3>
+                            <p class="text-xs text-slate-500">AHA Centre Cross-Border Hub</p>
+                        </div>
+
+                        <div class="flex flex-col gap-3 text-xs">
+                            <div>
+                                <div class="flex justify-between text-slate-600 mb-1">
+                                    <span>💧 Water: <b>2.8M / 3.0M L</b></span>
+                                    <span class="font-bold">93%</span>
+                                </div>
+                                <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                                    <div class="bg-sky-500 h-2 rounded-full" style="width: 93%"></div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between text-slate-600 mb-1">
+                                    <span>🍱 Food: <b>450k / 500k Packs</b></span>
+                                    <span class="font-bold">90%</span>
+                                </div>
+                                <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                                    <div class="bg-amber-500 h-2 rounded-full" style="width: 90%"></div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between text-slate-600 mb-1">
+                                    <span>🩹 Medical: <b>12,000 Kits</b></span>
+                                    <span class="font-bold">96%</span>
+                                </div>
+                                <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                                    <div class="bg-emerald-500 h-2 rounded-full" style="width: 96%"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button onclick="simulateRestock('Bangkok ASEAN')" class="w-full py-2 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 transition-colors shadow-sm">
+                            + Trigger Emergency Restock
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== TAB 4: MULTI-MODAL TRANSPORT OPTIMIZATION ==================== -->
+        <div id="section-tab-transport" class="analytics-tab-content flex flex-col gap-6 hidden">
+            <div class="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
+                <div class="border-b border-slate-100 pb-4 mb-6">
+                    <h2 class="text-xl font-display font-extrabold text-slate-900 flex items-center gap-2">
+                        <span>🚚</span> Multi-Modal Transport Speed vs. Cost Optimization
+                    </h2>
+                    <p class="text-xs text-slate-500">Comparative performance evaluation between Land Convoys, Air Helicopters, and River Rescue Fleets.</p>
+                </div>
+
+                <!-- 3 Modal Comparison Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <!-- Land Convoy -->
+                    <div class="bg-slate-50 border border-slate-200 rounded-2xl p-5 flex flex-col gap-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-2xl border border-blue-200">
+                                🚚
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-slate-900 text-base">Land Heavy Convoy</h3>
+                                <p class="text-xs text-slate-500">6x6 All-Terrain Trucks</p>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 text-xs">
+                            <div class="bg-white p-2.5 rounded-xl border border-slate-200/80">
+                                <span class="text-slate-400 block mb-0.5">Avg Speed:</span>
+                                <span class="font-bold text-slate-800">45 km/h</span>
+                            </div>
+                            <div class="bg-white p-2.5 rounded-xl border border-slate-200/80">
+                                <span class="text-slate-400 block mb-0.5">Payload:</span>
+                                <span class="font-bold text-slate-800">18.0 Tons</span>
+                            </div>
+                            <div class="bg-white p-2.5 rounded-xl border border-slate-200/80">
+                                <span class="text-slate-400 block mb-0.5">Cost / ton-km:</span>
+                                <span class="font-bold text-emerald-600">$1.20 USD</span>
+                            </div>
+                            <div class="bg-white p-2.5 rounded-xl border border-slate-200/80">
+                                <span class="text-slate-400 block mb-0.5">Weather Risk:</span>
+                                <span class="font-bold text-amber-600">Moderate</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Air Helicopter -->
+                    <div class="bg-slate-50 border border-slate-200 rounded-2xl p-5 flex flex-col gap-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-2xl border border-purple-200">
+                                🚁
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-slate-900 text-base">Air Helicopter / Airdrop</h3>
+                                <p class="text-xs text-slate-500">Mil Mi-17 & Bell 412</p>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 text-xs">
+                            <div class="bg-white p-2.5 rounded-xl border border-slate-200/80">
+                                <span class="text-slate-400 block mb-0.5">Avg Speed:</span>
+                                <span class="font-bold text-slate-800">220 km/h</span>
+                            </div>
+                            <div class="bg-white p-2.5 rounded-xl border border-slate-200/80">
+                                <span class="text-slate-400 block mb-0.5">Payload:</span>
+                                <span class="font-bold text-slate-800">3.5 Tons</span>
+                            </div>
+                            <div class="bg-white p-2.5 rounded-xl border border-slate-200/80">
+                                <span class="text-slate-400 block mb-0.5">Cost / ton-km:</span>
+                                <span class="font-bold text-red-600">$8.50 USD</span>
+                            </div>
+                            <div class="bg-white p-2.5 rounded-xl border border-slate-200/80">
+                                <span class="text-slate-400 block mb-0.5">Weather Risk:</span>
+                                <span class="font-bold text-red-600">High (Wind/Rain)</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Rescue River Boat -->
+                    <div class="bg-slate-50 border border-slate-200 rounded-2xl p-5 flex flex-col gap-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-12 h-12 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center text-2xl border border-teal-200">
+                                🚢
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-slate-900 text-base">Rescue River & Delta Barge</h3>
+                                <p class="text-xs text-slate-500">Ayeyarwady Flotilla</p>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 text-xs">
+                            <div class="bg-white p-2.5 rounded-xl border border-slate-200/80">
+                                <span class="text-slate-400 block mb-0.5">Avg Speed:</span>
+                                <span class="font-bold text-slate-800">28 km/h</span>
+                            </div>
+                            <div class="bg-white p-2.5 rounded-xl border border-slate-200/80">
+                                <span class="text-slate-400 block mb-0.5">Payload:</span>
+                                <span class="font-bold text-slate-800">25.0 Tons</span>
+                            </div>
+                            <div class="bg-white p-2.5 rounded-xl border border-slate-200/80">
+                                <span class="text-slate-400 block mb-0.5">Cost / ton-km:</span>
+                                <span class="font-bold text-emerald-600">$0.80 USD</span>
+                            </div>
+                            <div class="bg-white p-2.5 rounded-xl border border-slate-200/80">
+                                <span class="text-slate-400 block mb-0.5">Weather Risk:</span>
+                                <span class="font-bold text-emerald-600">Low (Flood Proof)</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Transport Trade-Off Curve Chart -->
+                <div class="h-96 relative w-full">
+                    <h3 class="text-sm font-bold text-slate-900 mb-3">📈 Response Time (Hours) vs. Budget Cost ($ USD) by Distance</h3>
+                    <canvas id="chart-transport-tradeoff"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== TAB 5: AI PRESCRIPTIVE RECOMMENDATIONS ==================== -->
+        <div id="section-tab-recommendations" class="analytics-tab-content flex flex-col gap-6 hidden">
+            <div class="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
+                <div class="border-b border-slate-100 pb-4 mb-6">
+                    <div class="flex items-center gap-2 text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1">
+                        <span>⚡</span> Real-Time AI Optimization Engine
+                    </div>
+                    <h2 class="text-xl font-display font-extrabold text-slate-900">Prescriptive Action Recommendations</h2>
+                    <p class="text-xs text-slate-500">Autonomous supply chain rebalancing and route optimization alerts generated by Rescura AI.</p>
+                </div>
+
+                <div class="flex flex-col gap-4">
+                    <!-- Recommendation 1 -->
+                    <div class="bg-blue-50/50 border border-blue-200 rounded-2xl p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                        <div class="flex items-start gap-4">
+                            <div class="w-12 h-12 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center text-2xl shrink-0">
+                                🔄
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="text-[10.5px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded uppercase">Inter-Depot Rebalancing</span>
+                                    <span class="text-xs text-slate-500 font-mono">Priority: High</span>
+                                </div>
+                                <h3 class="font-bold text-slate-900 text-base">Reallocate 45,000 L Water from Naypyidaw to Mandalay</h3>
+                                <p class="text-xs text-slate-600 mt-1 leading-relaxed">
+                                    Mandalay Regional Depot is operating at <b>46% capacity</b> while Naypyidaw holds <b>93% excess buffer</b>. Dispatching a 3-truck convoy along Highway 1 will secure northern earthquake response readiness.
+                                </p>
+                            </div>
+                        </div>
+                        <button onclick="applyRecommendation(this, 'Rebalance Naypyidaw -> Mandalay Authorized')" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm shrink-0">
+                            Authorize Rebalance ➔
+                        </button>
+                    </div>
+
+                    <!-- Recommendation 2 -->
+                    <div class="bg-emerald-50/50 border border-emerald-200 rounded-2xl p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                        <div class="flex items-start gap-4">
+                            <div class="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-2xl shrink-0">
+                                🚢
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="text-[10.5px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded uppercase">Cost Optimization</span>
+                                    <span class="text-xs text-slate-500 font-mono">Savings: $18,400</span>
+                                </div>
+                                <h3 class="font-bold text-slate-900 text-base">Switch Ayeyarwady Delta Mission to River Barge Fleet</h3>
+                                <p class="text-xs text-slate-600 mt-1 leading-relaxed">
+                                    Shifting from Air Helicopter to Ayeyarwady River Barges reduces mission expenditure by <b>62%</b> with only a negligible <b>+45 min</b> arrival difference due to direct water access.
+                                </p>
+                            </div>
+                        </div>
+                        <button onclick="applyRecommendation(this, 'River Barge Mode Shift Authorized')" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm shrink-0">
+                            Approve Modal Shift ➔
+                        </button>
+                    </div>
+
+                    <!-- Recommendation 3 -->
+                    <div class="bg-amber-50/50 border border-amber-200 rounded-2xl p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                        <div class="flex items-start gap-4">
+                            <div class="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center text-2xl shrink-0">
+                                📦
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="text-[10.5px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded uppercase">Advance Pre-Positioning</span>
+                                    <span class="text-xs text-slate-500 font-mono">Seasonal Risk</span>
+                                </div>
+                                <h3 class="font-bold text-slate-900 text-base">Pre-Stage 20,000 Food Packs to Bago Ahead of Monsoon Inundation</h3>
+                                <p class="text-xs text-slate-600 mt-1 leading-relaxed">
+                                    Historical GIS time-series indicates an <b>84% probability</b> of flash floods in Bago Basin over the next 14 days. Pre-positioning food supplies avoids expensive emergency aerial supply drops.
+                                </p>
+                            </div>
+                        </div>
+                        <button onclick="applyRecommendation(this, 'Pre-Positioning Authorized')" class="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm shrink-0">
+                            Approve Pre-Stage ➔
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Analytics Logic -->
+    <script src="analytics.js?v=20260817-fast-v3"></script>
+</body>
+</html>

@@ -11,685 +11,40 @@
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" 
         crossorigin="" 
     />
-    <!-- Google Fonts: Inter & Outfit -->
+    <!-- Google Fonts: Inter & Outfit & Roboto Mono -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@500;600;700;800&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
     <!-- Global CSS Stylesheet -->
-    <link rel="stylesheet" href="style.css?v=20260810">
+    <link rel="stylesheet" href="style.css?v=20260817-clean-light">
 
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        body, html {
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            font-family: 'Inter', system-ui, -apple-system, sans-serif;
-            background-color: #0b0f19;
-            color: #f8fafc;
-        }
-        #app-layout {
-            display: flex;
-            width: 100vw;
-            height: 100vh;
-            position: relative;
-        }
-        #map {
-            flex: 1;
-            height: 100vh;
-            z-index: 1;
-            background: #0b0f19;
-        }
-
-        /* Leaflet Dark Glassmorphism Overrides */
-        .leaflet-popup-content-wrapper, .leaflet-popup-tip {
-            background: rgba(15, 23, 42, 0.94) !important;
-            backdrop-filter: blur(20px) !important;
-            -webkit-backdrop-filter: blur(20px) !important;
-            color: #f8fafc !important;
-            border: 1px solid rgba(255, 255, 255, 0.15) !important;
-            box-shadow: 0 20px 35px -5px rgba(0, 0, 0, 0.8), 0 0 15px rgba(59, 130, 246, 0.2) !important;
-            border-radius: 16px !important;
-        }
-        .leaflet-popup-content {
-            margin: 16px 18px !important;
-            line-height: 1.5 !important;
-            font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
-        }
-        .leaflet-container a.leaflet-popup-close-button {
-            color: #94a3b8 !important;
-            padding: 8px !important;
-            font-size: 16px !important;
-        }
-        .leaflet-container a.leaflet-popup-close-button:hover {
-            color: #f8fafc !important;
-        }
-
-        /* Custom DivIcon Marker Styling */
-        .disaster-div-icon {
-            font-size: 28px;
-            text-align: center;
-            line-height: 34px;
-            filter: drop-shadow(0 0 10px rgba(239, 68, 68, 0.9));
-            cursor: pointer;
-            transition: transform 0.2s ease;
-        }
-        .disaster-div-icon:hover {
-            transform: scale(1.2);
-        }
-
-        .sos-div-wrapper {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .sos-pulse-marker {
-            width: 26px;
-            height: 26px;
-            border-radius: 50%;
-            position: relative;
-            cursor: pointer;
-            border: 2px solid #ffffff;
-        }
-        .sos-pulse-marker.pending {
-            background-color: #ef4444;
-            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.8);
-            animation: radar-pulse-red 1.4s infinite;
-        }
-        .sos-pulse-marker.dispatched {
-            background-color: #f97316;
-            box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.8);
-            animation: radar-pulse-orange 1.4s infinite;
-        }
-        .sos-pulse-marker.resolved {
-            background-color: #10b981;
-            box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.8);
-            animation: radar-pulse-green 1.4s infinite;
-        }
-
-        @keyframes radar-pulse-red {
-            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.9); }
-            70% { transform: scale(1.15); box-shadow: 0 0 0 22px rgba(239, 68, 68, 0); }
-            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-        }
-        @keyframes radar-pulse-orange {
-            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.9); }
-            70% { transform: scale(1.15); box-shadow: 0 0 0 16px rgba(249, 115, 22, 0); }
-            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(249, 115, 22, 0); }
-        }
-        @keyframes radar-pulse-green {
-            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.9); }
-            70% { transform: scale(1.15); box-shadow: 0 0 0 16px rgba(16, 185, 129, 0); }
-            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
-        }
-
-        /* Top Floating Stats Bar */
-        .header-top-bar {
-            position: absolute;
-            top: 76px;
-            left: 428px;
-            right: 340px;
-            z-index: 1000;
-            pointer-events: none;
-        }
-
-        .top-stats-bar {
-            pointer-events: auto;
-            display: flex;
-            gap: 10px;
-        }
-        .stat-widget {
-            flex: 1;
-            background: rgba(15, 23, 42, 0.88);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            border-radius: 14px;
-            padding: 10px 14px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            box-shadow: 0 10px 20px -3px rgba(0, 0, 0, 0.5);
-            transition: transform 0.2s ease, border-color 0.2s ease;
-        }
-        .stat-widget:hover {
-            transform: translateY(-2px);
-            border-color: rgba(59, 130, 246, 0.4);
-        }
-        .stat-label {
-            font-size: 10px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.8px;
-            color: #94a3b8;
-            margin-bottom: 2px;
-        }
-        .stat-value {
-            font-family: 'Outfit', sans-serif;
-            font-size: 20px;
-            font-weight: 800;
-            color: #60a5fa;
-        }
-        .stat-value.stat-pending { color: #f87171; }
-        .stat-value.stat-dispatched { color: #fb923c; }
-        .stat-value.stat-water { color: #38bdf8; }
-        .stat-value.stat-food { color: #fbbf24; }
-        .stat-value.stat-time { color: #c084fc; }
-
-        .top-action-toolbar {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .top-action-toolbar button {
-            height: 34px;
-            padding: 0 14px;
-            border-radius: 10px;
-            font-size: 12px;
-            font-weight: 700;
-            white-space: nowrap;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-
-        .btn-sync-ai {
-            background: linear-gradient(135deg, #2563eb, #1d4ed8);
-            border: 1px solid rgba(255, 255, 255, 0.25);
-            color: #ffffff;
-            font-family: inherit;
-            font-size: 12px;
-            font-weight: 700;
-            padding: 0 14px;
-            border-radius: 12px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            box-shadow: 0 10px 20px -3px rgba(37, 99, 235, 0.5);
-            transition: all 0.2s ease;
-            white-space: nowrap;
-        }
-        .btn-sync-ai:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 14px 25px -3px rgba(37, 99, 235, 0.7);
-        }
-        .btn-sync-ai:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .btn-refresh-logistics {
-            background: linear-gradient(135deg, #059669, #047857);
-            border: 1px solid rgba(255, 255, 255, 0.25);
-            color: #ffffff;
-            font-family: inherit;
-            font-size: 12px;
-            font-weight: 700;
-            padding: 0 14px;
-            border-radius: 12px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            box-shadow: 0 10px 20px -3px rgba(5, 150, 105, 0.5);
-            transition: all 0.2s ease;
-            white-space: nowrap;
-        }
-        .btn-refresh-logistics:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 14px 25px -3px rgba(5, 150, 105, 0.7);
-        }
-
-        /* Glassmorphism Command Sidebar */
-        .sidebar {
-            position: absolute;
-            top: 76px;
-            left: 16px;
-            bottom: 16px;
-            width: 396px;
-            z-index: 1000;
-            background: rgba(15, 23, 42, 0.94);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            border-radius: 18px;
-            box-shadow: 0 25px 35px -5px rgba(0, 0, 0, 0.6);
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-        .sidebar-header {
-            padding: 18px 20px 14px 20px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-            background: rgba(30, 41, 59, 0.4);
-        }
-        .sidebar-title-badge {
-            font-size: 10px;
-            font-weight: 800;
-            letter-spacing: 1.5px;
-            color: #f87171;
-            text-transform: uppercase;
-            margin-bottom: 4px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-        .sidebar-title-badge::before {
-            content: '';
-            display: inline-block;
-            width: 7px;
-            height: 7px;
-            background-color: #ef4444;
-            border-radius: 50%;
-            animation: pulse 1.4s infinite;
-        }
-        @keyframes pulse {
-            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
-            70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
-            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-        }
-        .sidebar-title {
-            font-family: 'Outfit', sans-serif;
-            font-size: 20px;
-            font-weight: 800;
-            color: #f8fafc;
-        }
-
-        .search-container {
-            padding: 12px 18px 6px 18px;
-        }
-        .search-input {
-            width: 100%;
-            background: rgba(30, 41, 59, 0.6);
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            border-radius: 10px;
-            padding: 10px 14px;
-            color: #f8fafc;
-            font-family: inherit;
-            font-size: 13px;
-            outline: none;
-            transition: border-color 0.2s ease;
-        }
-        .search-input:focus {
-            border-color: #3b82f6;
-        }
-
-        /* Continent Filter Selector Bar */
-        .continent-filter-bar {
-            display: flex;
-            gap: 6px;
-            overflow-x: auto;
-            padding: 6px 18px 10px 18px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-        }
-        .continent-filter-bar::-webkit-scrollbar {
-            height: 4px;
-        }
-        .continent-filter-bar::-webkit-scrollbar-thumb {
-            background: rgba(148, 163, 184, 0.3);
-            border-radius: 2px;
-        }
-        .continent-chip {
-            padding: 5px 12px;
-            border-radius: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            background: rgba(30, 41, 59, 0.6);
-            color: #94a3b8;
-            font-family: inherit;
-            font-size: 11px;
-            font-weight: 700;
-            cursor: pointer;
-            white-space: nowrap;
-            transition: all 0.2s ease;
-            flex-shrink: 0;
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-        }
-        .continent-chip:hover {
-            border-color: rgba(59, 130, 246, 0.5);
-            color: #f8fafc;
-        }
-        .continent-chip.active {
-            background: rgba(59, 130, 246, 0.25);
-            border-color: #3b82f6;
-            color: #60a5fa;
-            box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
-        }
-        .chip-count {
-            background: rgba(255, 255, 255, 0.12);
-            color: #e2e8f0;
-            font-size: 10px;
-            font-weight: 800;
-            padding: 1px 6px;
-            border-radius: 10px;
-            margin-left: 2px;
-            display: inline-block;
-            line-height: 1.2;
-        }
-        .continent-chip.active .chip-count {
-            background: rgba(59, 130, 246, 0.45);
-            color: #ffffff;
-            border: 1px solid rgba(147, 197, 253, 0.4);
-        }
-
-        .tab-bar {
-            display: flex;
-            padding: 10px 18px;
-            gap: 10px;
-            background: rgba(15, 23, 42, 0.4);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-        }
-        .tab-btn {
-            flex: 1;
-            padding: 10px 14px;
-            border-radius: 10px;
-            border: 1px solid transparent;
-            background: transparent;
-            color: #94a3b8;
-            font-family: inherit;
-            font-size: 13px;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-        }
-        .tab-btn.active {
-            background: rgba(59, 130, 246, 0.22);
-            color: #60a5fa;
-            border-color: rgba(59, 130, 246, 0.4);
-        }
-
-        .alerts-content {
-            flex: 1;
-            overflow-y: auto;
-            padding: 16px;
-            display: flex;
-            flex-direction: column;
-            gap: 14px;
-        }
-
-        .alerts-content::-webkit-scrollbar {
-            width: 6px;
-        }
-        .alerts-content::-webkit-scrollbar-track {
-            background: rgba(15, 23, 42, 0.5);
-        }
-        .alerts-content::-webkit-scrollbar-thumb {
-            background: rgba(148, 163, 184, 0.3);
-            border-radius: 3px;
-        }
-
-        /* Fixed Unclumped Alert Cards */
-        .alert-card {
-            background: rgba(30, 41, 59, 0.65);
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            border-radius: 14px;
-            padding: 16px;
-            cursor: pointer;
-            transition: all 0.22s ease;
-            position: relative;
-            overflow: hidden;
-            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            flex-shrink: 0 !important; /* PREVENTS VERTICAL CLUMPING & SQUISHING */
-            min-height: auto;
-            width: 100%;
-        }
-        .alert-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 5px;
-            height: 100%;
-            background: #ef4444;
-            border-radius: 5px 0 0 5px;
-        }
-        .alert-card:hover {
-            background: rgba(30, 41, 59, 0.95);
-            border-color: rgba(59, 130, 246, 0.6);
-            transform: translateY(-2px);
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-        }
-        .card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding-bottom: 6px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-        }
-        .card-type {
-            font-size: 11px;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            color: #38bdf8;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-        .card-severity {
-            font-size: 10px;
-            font-weight: 800;
-            padding: 3px 10px;
-            border-radius: 12px;
-            background: rgba(239, 68, 68, 0.2);
-            color: #f87171;
-            border: 1px solid rgba(239, 68, 68, 0.3);
-        }
-        .card-title {
-            font-size: 14px;
-            font-weight: 700;
-            line-height: 1.4;
-            color: #f8fafc;
-            margin-top: 2px;
-        }
-        .card-meta {
-            font-size: 11px;
-            color: #94a3b8;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-            align-items: center;
-            margin-top: 4px;
-        }
-        .meta-pill {
-            background: rgba(15, 23, 42, 0.7);
-            padding: 4px 10px;
-            border-radius: 8px;
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-        }
-        .time-pill {
-            color: #c084fc;
-            border-color: rgba(192, 132, 252, 0.3);
-            background: rgba(192, 132, 252, 0.12);
-            font-weight: 700;
-        }
-        .continent-pill {
-            color: #60a5fa;
-            border-color: rgba(96, 165, 250, 0.3);
-            background: rgba(59, 130, 246, 0.12);
-            font-weight: 700;
-        }
-
-        .btn-dispatch-action {
-            display: inline-block;
-            width: 100%;
-            margin-top: 8px;
-            padding: 7px 10px;
-            border-radius: 8px;
-            border: none;
-            font-size: 11px;
-            font-weight: 800;
-            cursor: pointer;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            transition: all 0.2s ease;
-        }
-        .btn-dispatch {
-            background: linear-gradient(135deg, #ea580c, #c2410c);
-            color: #ffffff;
-            box-shadow: 0 4px 10px rgba(234, 88, 12, 0.4);
-        }
-        .btn-dispatch:hover {
-            background: linear-gradient(135deg, #f97316, #ea580c);
-            box-shadow: 0 6px 14px rgba(234, 88, 12, 0.6);
-        }
-        .btn-resolve {
-            background: linear-gradient(135deg, #059669, #047857);
-            color: #ffffff;
-            box-shadow: 0 4px 10px rgba(5, 150, 105, 0.4);
-        }
-        .btn-resolve:hover {
-            background: linear-gradient(135deg, #10b981, #059669);
-            box-shadow: 0 6px 14px rgba(5, 150, 105, 0.6);
-        }
-
-        /* High-Priority Emergency Popup Modal Overlay */
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: rgba(11, 15, 25, 0.88);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            z-index: 10000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            opacity: 1;
-            transition: opacity 0.3s ease, visibility 0.3s ease;
-        }
-        .modal-overlay.hidden {
-            display: none !important;
-            opacity: 0;
-            visibility: hidden;
-            pointer-events: none;
-        }
-        .modal-card {
-            background: rgba(15, 23, 42, 0.96);
-            border: 2px solid #ef4444;
-            border-radius: 20px;
-            width: 500px;
-            max-width: 92vw;
-            padding: 24px;
-            box-shadow: 0 0 40px rgba(239, 68, 68, 0.5), 0 25px 30px -5px rgba(0, 0, 0, 0.8);
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-            animation: modal-glow-pulse 2s infinite ease-in-out;
-        }
-        @keyframes modal-glow-pulse {
-            0% { box-shadow: 0 0 25px rgba(239, 68, 68, 0.4); }
-            50% { box-shadow: 0 0 50px rgba(239, 68, 68, 0.8); }
-            100% { box-shadow: 0 0 25px rgba(239, 68, 68, 0.4); }
-        }
-        .modal-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            padding-bottom: 14px;
-        }
-        .modal-badge {
-            background: rgba(239, 68, 68, 0.25);
-            color: #f87171;
-            font-size: 11px;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            padding: 4px 12px;
-            border-radius: 20px;
-            border: 1px solid rgba(239, 68, 68, 0.4);
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-        .modal-body {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        .modal-title-text {
-            font-family: 'Outfit', sans-serif;
-            font-size: 20px;
-            font-weight: 800;
-            color: #f8fafc;
-        }
-        .modal-field-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 13px;
-            color: #cbd5e1;
-            background: rgba(30, 41, 59, 0.6);
-            padding: 10px 14px;
-            border-radius: 10px;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-        }
-        .modal-field-val {
-            font-weight: 700;
-            color: #f8fafc;
-        }
-        .modal-actions {
-            display: flex;
-            gap: 12px;
-            margin-top: 8px;
-        }
-        .btn-modal-action {
-            flex: 1;
-            padding: 12px;
-            font-family: inherit;
-            font-size: 13px;
-            font-weight: 700;
-            border-radius: 12px;
-            border: none;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-        .btn-modal-route {
-            background: linear-gradient(135deg, #059669, #047857);
-            color: #ffffff;
-            box-shadow: 0 4px 14px rgba(5, 150, 105, 0.5);
-        }
-        .btn-modal-route:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(5, 150, 105, 0.7);
-        }
-        .btn-modal-close {
-            background: rgba(255, 255, 255, 0.1);
-            color: #cbd5e1;
-            border: 1px solid rgba(255, 255, 255, 0.15);
-        }
-        .btn-modal-close:hover {
-            background: rgba(255, 255, 255, 0.18);
-            color: #ffffff;
-        }
-    </style>
     <!-- Supabase JS CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Tailwind CSS (CDN for Vibe Coding) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              brand: {
+                blue: '#00f0ff',
+                yellow: '#ffcc00',
+                red: '#ff4444',
+                purple: '#b829ff',
+                teal: '#00d2b8',
+                green: '#00e676'
+              }
+            }
+          }
+        }
+      }
+    </script>
 </head>
-<body>
+<body class="min-h-screen bg-slate-50 text-slate-800 overflow-x-hidden font-sans">
     <!-- Fixed Global Navigation Bar -->
     <nav class="global-navbar">
         <a href="index.html" class="nav-brand">
@@ -697,160 +52,383 @@
             <span>RESCURA SYNC</span>
         </a>
         <div class="nav-links">
-            <a href="index.html" class="nav-link active">🗺️ Live Map</a>
-            <a href="events.html" class="nav-link">⚠️ Disaster Events</a>
-            <a href="knowledge.html" class="nav-link">📖 Knowledge Base</a>
-            <a href="about.html" class="nav-link">ℹ️ About Us</a>
+            <a href="index.html" class="nav-link active">
+                <span>🗺️</span>
+                <span>Live Map</span>
+            </a>
+            <a href="analytics.html" class="nav-link">
+                <span>📊</span>
+                <span>Analytics Dashboard</span>
+            </a>
+            <a href="events.html" class="nav-link">
+                <span>⚠️</span>
+                <span>Disaster Events</span>
+            </a>
+            <a href="knowledge.html" class="nav-link">
+                <span>📖</span>
+                <span>Knowledge Base</span>
+            </a>
+            <a href="about.html" class="nav-link">
+                <span>ℹ️</span>
+                <span>About Us</span>
+            </a>
         </div>
         <div class="nav-right-toolbar">
+            <button class="btn-nav-amber" id="btn-raw-data" onclick="openRawDataModal()" title="Inspect Database Datasets & Provenance">
+                <span>🗄️</span> Open Datasets
+            </button>
             <button class="btn-nav-purple" id="btn-pdf-download" onclick="downloadActionPlanPDF(1)">
-                <span id="pdf-icon">📄</span> Action Plan PDF
+                <span id="pdf-icon">📄</span> PDF
             </button>
             <button class="btn-nav-blue" id="btn-sync-ai" onclick="syncData()">
-                <span id="sync-icon">⚡</span> Sync AI
+                <span id="sync-icon">⚡</span> AI
             </button>
             <button class="btn-nav-teal" id="btn-refresh-logistics" onclick="refreshLogistics()">
-                <span id="refresh-icon">🔄</span> Refresh
+                <span id="refresh-icon">🔄</span>
             </button>
-            <span class="dispatcher-id-badge" id="dispatcher-id-display">👤 Connecting...</span>
             <div class="nav-status-badge">
                 <span>LIVE TELEMETRY</span>
             </div>
         </div>
     </nav>
 
-    <div id="app-layout">
-        <!-- Top Floating Stats Bar -->
-        <div class="header-top-bar">
-            <div class="top-stats-bar">
-                <div class="stat-widget">
-                    <span class="stat-label">Active Disasters</span>
-                    <span class="stat-value" id="stat-disasters">0</span>
+    <!-- Map Section (Stats Positioned Cleanly Above Map) -->
+    <div class="w-full max-w-[1600px] mx-auto px-6 mt-24 mb-10 flex flex-col gap-5">
+        <!-- Top Stats Bar (Cleanly Positioned Above Map) -->
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            
+            <div class="bg-white border border-slate-200/90 rounded-2xl p-4 flex flex-col justify-between shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-blue-400 hover:shadow-md">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">Active Disasters</span>
+                    <span class="text-sm">🌍</span>
                 </div>
-                <div class="stat-widget">
-                    <span class="stat-label">Total Water Needed</span>
-                    <span class="stat-value stat-water" id="total-water">0 L</span>
+                <span class="font-display text-2xl font-extrabold text-blue-600 leading-tight" id="stat-disasters">0</span>
+            </div>
+
+            <div class="bg-white border border-slate-200/90 rounded-2xl p-4 flex flex-col justify-between shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-sky-400 hover:shadow-md">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">Water Needed</span>
+                    <span class="text-sm">💧</span>
                 </div>
-                <div class="stat-widget">
-                    <span class="stat-label">Total Food Needed</span>
-                    <span class="stat-value stat-food" id="total-food">0 Packs</span>
+                <span class="font-display text-2xl font-extrabold text-sky-600 font-mono leading-tight" id="total-water">0 L</span>
+            </div>
+
+            <div class="bg-white border border-slate-200/90 rounded-2xl p-4 flex flex-col justify-between shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-amber-400 hover:shadow-md">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">Food Needed</span>
+                    <span class="text-sm">🍱</span>
                 </div>
-                <div class="stat-widget">
-                    <span class="stat-label">Avg Rescue Time</span>
-                    <span class="stat-value stat-time" id="avg-time">0 hrs</span>
+                <span class="font-display text-2xl font-extrabold text-amber-600 font-mono leading-tight" id="total-food">0 Packs</span>
+            </div>
+
+            <div class="bg-white border border-slate-200/90 rounded-2xl p-4 flex flex-col justify-between shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-purple-400 hover:shadow-md">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">Avg Rescue Time</span>
+                    <span class="text-sm">⏱️</span>
                 </div>
-                <div class="stat-widget">
-                    <span class="stat-label">Pending SOS</span>
-                    <span class="stat-value stat-pending" id="stat-pending-sos">0</span>
+                <span class="font-display text-2xl font-extrabold text-purple-600 font-mono leading-tight" id="avg-time">0 hrs</span>
+            </div>
+
+            <div class="bg-white border border-slate-200/90 rounded-2xl p-4 flex flex-col justify-between shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-red-400 hover:shadow-md">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">Pending SOS</span>
+                    <span class="text-sm">🚨</span>
                 </div>
-                <div class="stat-widget">
-                    <span class="stat-label">Dispatched</span>
-                    <span class="stat-value stat-dispatched" id="stat-dispatched">0</span>
+                <span class="font-display text-2xl font-extrabold text-red-600 font-mono leading-tight" id="stat-pending-sos">0</span>
+            </div>
+
+            <div class="bg-white border border-slate-200/90 rounded-2xl p-4 flex flex-col justify-between shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-emerald-400 hover:shadow-md">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">Dispatched</span>
+                    <span class="text-sm">🚚</span>
                 </div>
+                <span class="font-display text-2xl font-extrabold text-emerald-600 font-mono leading-tight" id="stat-dispatched">0</span>
+            </div>
+            
+        </div>
+        
+        <!-- Leaflet Map Container (Unblocked & Full View) -->
+        <div class="relative w-full h-[620px] rounded-3xl overflow-hidden border border-slate-200 shadow-md">
+            <div id="map" class="w-full h-full z-0 bg-slate-50"></div>
+        </div>
+    </div>
+
+    <!-- GDACS Overview & Hazard Assessment Section -->
+    <div class="w-full max-w-[1600px] mx-auto px-6 mb-12 flex flex-col xl:flex-row gap-8">
+        <!-- What is GDACS / Rescura Sync? -->
+        <div class="flex-1 bg-white border border-slate-200 rounded-2xl p-8 shadow-sm relative overflow-hidden">
+            <div class="absolute -top-24 -right-24 w-64 h-64 bg-blue-50 rounded-full blur-3xl pointer-events-none"></div>
+            
+            <h2 class="font-display text-2xl font-extrabold text-slate-900 mb-4 border-b border-slate-100 pb-4">What is GDACS? (Rescura Sync Integration)</h2>
+            <p class="text-slate-600 leading-relaxed mb-4 text-sm">
+                The Global Disaster Alert and Coordination System (GDACS) is a cooperation framework between the United Nations and the European Commission. It provides disaster managers and disaster information systems worldwide with real-time access to web-based disaster information systems and related coordination tools.
+            </p>
+            <p class="text-slate-600 leading-relaxed text-sm">
+                <strong>Rescura Sync</strong> integrates directly with the GDACS real-time data feeds, parsing automated estimates and risk analysis for sudden-onset disasters (provided by the European Commission Joint Research Centre). This allows rapid dispatch and logistics routing to the nearest supply depots globally.
+            </p>
+        </div>
+
+        <!-- Hazard Assessment & Impact Estimation -->
+        <div class="xl:w-[450px] bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col gap-6 relative overflow-hidden">
+             <div class="absolute -bottom-24 -left-24 w-64 h-64 bg-amber-50 rounded-full blur-3xl pointer-events-none"></div>
+
+             <h3 class="font-display text-lg font-bold text-slate-900 flex items-center gap-2">
+                 <span class="text-amber-500">📊</span> Live Hazard Assessment
+             </h3>
+             
+             <div class="grid grid-cols-2 gap-4 flex-1">
+                 <div class="bg-slate-50 border border-slate-200/80 rounded-xl p-4 flex flex-col justify-center items-center text-center">
+                     <span class="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Total Active Events</span>
+                     <span class="text-3xl font-black text-slate-900" id="hazard-total-events">--</span>
+                 </div>
+                 <div class="bg-slate-50 border border-slate-200/80 rounded-xl p-4 flex flex-col justify-center items-center text-center">
+                     <span class="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Critical (Red/Orange)</span>
+                     <span class="text-3xl font-black text-red-600" id="hazard-critical-alerts">--</span>
+                 </div>
+                 <div class="bg-slate-50 border border-slate-200/80 rounded-xl p-4 flex flex-col justify-center items-center text-center col-span-2">
+                     <span class="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Most Affected Region</span>
+                     <span class="text-lg font-bold text-blue-600" id="hazard-affected-region">Calculating...</span>
+                 </div>
+             </div>
+             
+             <a href="analytics.html" class="w-full py-3 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold tracking-wider uppercase rounded-xl border border-blue-200 transition-colors text-center block">
+                 Full Analytics & Predictions ➔
+             </a>
+        </div>
+    </div>
+
+    <!-- GDACS Disaster Columns (The 6 Feeds) -->
+    <div id="gdacs-events" class="w-full max-w-[1600px] mx-auto px-6 mb-16 scroll-mt-24">
+        <div class="flex items-center gap-4 mb-6">
+            <h2 class="font-display text-2xl font-extrabold text-slate-900">Live Disaster Event Feeds</h2>
+            <div class="flex-1 h-px bg-slate-200"></div>
+        </div>
+        
+        <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
+            <!-- Earthquakes -->
+            <div class="flex flex-col gap-3">
+                <div class="uppercase text-[11px] font-extrabold tracking-wider text-slate-600 border-b-2 border-emerald-500 pb-2 mb-2 flex items-center justify-between">
+                    <span class="flex items-center gap-2"><span class="text-emerald-600 text-lg">🌍</span> Earthquakes</span>
+                    <span class="bg-slate-100 px-2 py-0.5 rounded text-[10px] text-slate-700 font-bold" id="count-earthquake">0</span>
+                </div>
+                <div id="col-earthquake" class="flex flex-col gap-3 max-h-[500px] overflow-y-auto pr-1 custom-scrollbar"></div>
+            </div>
+            <!-- Tropical Cyclones -->
+            <div class="flex flex-col gap-3">
+                <div class="uppercase text-[11px] font-extrabold tracking-wider text-slate-600 border-b-2 border-blue-500 pb-2 mb-2 flex items-center justify-between">
+                    <span class="flex items-center gap-2"><span class="text-blue-600 text-lg">🌀</span> Cyclones</span>
+                    <span class="bg-slate-100 px-2 py-0.5 rounded text-[10px] text-slate-700 font-bold" id="count-cyclone">0</span>
+                </div>
+                <div id="col-cyclone" class="flex flex-col gap-3 max-h-[500px] overflow-y-auto pr-1 custom-scrollbar"></div>
+            </div>
+            <!-- Floods -->
+            <div class="flex flex-col gap-3">
+                <div class="uppercase text-[11px] font-extrabold tracking-wider text-slate-600 border-b-2 border-teal-500 pb-2 mb-2 flex items-center justify-between">
+                    <span class="flex items-center gap-2"><span class="text-teal-600 text-lg">🌊</span> Floods</span>
+                    <span class="bg-slate-100 px-2 py-0.5 rounded text-[10px] text-slate-700 font-bold" id="count-flood">0</span>
+                </div>
+                <div id="col-flood" class="flex flex-col gap-3 max-h-[500px] overflow-y-auto pr-1 custom-scrollbar"></div>
+            </div>
+            <!-- Volcanoes -->
+            <div class="flex flex-col gap-3">
+                <div class="uppercase text-[11px] font-extrabold tracking-wider text-slate-600 border-b-2 border-red-500 pb-2 mb-2 flex items-center justify-between">
+                    <span class="flex items-center gap-2"><span class="text-red-600 text-lg">🌋</span> Volcanoes</span>
+                    <span class="bg-slate-100 px-2 py-0.5 rounded text-[10px] text-slate-700 font-bold" id="count-volcano">0</span>
+                </div>
+                <div id="col-volcano" class="flex flex-col gap-3 max-h-[500px] overflow-y-auto pr-1 custom-scrollbar"></div>
+            </div>
+            <!-- Droughts -->
+            <div class="flex flex-col gap-3">
+                <div class="uppercase text-[11px] font-extrabold tracking-wider text-slate-600 border-b-2 border-amber-500 pb-2 mb-2 flex items-center justify-between">
+                    <span class="flex items-center gap-2"><span class="text-amber-600 text-lg">🏜️</span> Droughts</span>
+                    <span class="bg-slate-100 px-2 py-0.5 rounded text-[10px] text-slate-700 font-bold" id="count-drought">0</span>
+                </div>
+                <div id="col-drought" class="flex flex-col gap-3 max-h-[500px] overflow-y-auto pr-1 custom-scrollbar"></div>
+            </div>
+            <!-- Forest Fires -->
+            <div class="flex flex-col gap-3">
+                <div class="uppercase text-[11px] font-extrabold tracking-wider text-slate-600 border-b-2 border-orange-500 pb-2 mb-2 flex items-center justify-between">
+                    <span class="flex items-center gap-2"><span class="text-orange-600 text-lg">🔥</span> Forest Fires</span>
+                    <span class="bg-slate-100 px-2 py-0.5 rounded text-[10px] text-slate-700 font-bold" id="count-fire">0</span>
+                </div>
+                <div id="col-fire" class="flex flex-col gap-3 max-h-[500px] overflow-y-auto pr-1 custom-scrollbar"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dynamic Live Info Blocks (Real GDACS & Copernicus Telemetry) -->
+    <div class="w-full max-w-[1600px] mx-auto px-6 mb-24 grid grid-cols-1 xl:grid-cols-3 gap-8">
+        
+        <!-- Virtual OSOCC Live Telemetry -->
+        <div id="virtual-osocc" class="flex flex-col gap-4 scroll-mt-24">
+            <div class="flex items-center justify-between bg-blue-50 p-3 rounded-xl border border-blue-200">
+                <div class="flex items-center gap-3">
+                    <span class="text-blue-600 text-xl">💬</span>
+                    <h3 class="font-display font-bold text-base text-slate-900">Virtual OSOCC Live Telemetry</h3>
+                </div>
+                <span class="text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full border border-blue-200">UN Coordination Feed</span>
+            </div>
+            <div id="virtual-osocc-container" class="flex flex-col gap-3 bg-white rounded-2xl border border-slate-200 p-4 shadow-sm min-h-[180px]">
+                <div class="text-slate-400 text-xs italic p-4 text-center">Loading live Virtual OSOCC coordinator feeds...</div>
             </div>
         </div>
 
-        <!-- Glassmorphism Command Sidebar with Dropdown Toggle -->
-        <div class="sidebar" id="sidebar-panel">
-            <div class="sidebar-header" onclick="toggleSidebarPanel()" title="Click to collapse / expand panel">
-                <div>
-                    <div class="sidebar-title-badge">Command Center</div>
-                    <div class="sidebar-title">Rescura SAC Panel</div>
+        <!-- Copernicus & Satellite GIS -->
+        <div id="maps-imagery" class="flex flex-col gap-4 scroll-mt-24">
+            <div class="flex items-center justify-between bg-emerald-50 p-3 rounded-xl border border-emerald-200">
+                <div class="flex items-center gap-3">
+                    <span class="text-emerald-600 text-xl">🛰️</span>
+                    <h3 class="font-display font-bold text-base text-slate-900">Copernicus & Satellite GIS</h3>
                 </div>
-                <button class="btn-sidebar-toggle" id="btn-sidebar-toggle">
-                    <span id="sidebar-toggle-chevron">🔽</span>
-                </button>
+                <span class="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200">Sentinel-2 & NASA</span>
             </div>
-            <div class="sidebar-body" id="sidebar-body">
-                <div class="search-container">
-                    <input type="text" class="search-input" id="search-input" placeholder="🔍 Search disasters or locations..." onkeyup="filterAlerts()">
-                </div>
-                
-                <!-- Continent Filter Selector Bar -->
-                <div class="continent-filter-bar">
-                    <button class="continent-chip active" id="chip-all" onclick="filterByContinent('All')">All Continents <span class="chip-count">0</span></button>
-                    <button class="continent-chip" id="chip-asia" onclick="filterByContinent('Asia')">🌏 Asia <span class="chip-count">0</span></button>
-                    <button class="continent-chip" id="chip-europe" onclick="filterByContinent('Europe')">🌍 Europe <span class="chip-count">0</span></button>
-                    <button class="continent-chip" id="chip-americas" onclick="filterByContinent('Americas')">🌎 Americas <span class="chip-count">0</span></button>
-                    <button class="continent-chip" id="chip-africa" onclick="filterByContinent('Africa')">🌍 Africa <span class="chip-count">0</span></button>
-                    <button class="continent-chip" id="chip-oceania" onclick="filterByContinent('Oceania')">🌏 Oceania <span class="chip-count">0</span></button>
-                </div>
-
-                <div class="tab-bar">
-                    <button class="tab-btn active" id="tab-gdacs" onclick="switchTab('gdacs')">⚠️ Active Disasters</button>
-                    <button class="tab-btn" id="tab-sos" onclick="switchTab('sos')">🚨 Civilian SOS</button>
-                </div>
-                <div class="alerts-content" id="alerts-container">
-                    <div style="color: #94a3b8; text-align: center; padding: 20px;">Loading live emergency telemetry...</div>
-                </div>
+            <div id="maps-imagery-container" class="grid grid-cols-2 gap-4">
+                <div class="text-slate-400 text-xs italic p-4 text-center col-span-2">Loading satellite layers...</div>
             </div>
         </div>
 
-        <!-- Leaflet Map Container -->
-        <div id="map"></div>
+        <!-- GDACS & Emergency Bulletins -->
+        <div class="flex flex-col gap-4">
+            <div class="flex items-center justify-between bg-purple-50 p-3 rounded-xl border border-purple-200">
+                <div class="flex items-center gap-3">
+                    <span class="text-purple-600 text-xl">📰</span>
+                    <h3 class="font-display font-bold text-base text-slate-900">GDACS & Emergency Bulletins</h3>
+                </div>
+                <span class="text-[10px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full border border-purple-200">UN-OCHA RSS Live</span>
+            </div>
+            <div id="gdacs-news-container" class="flex flex-col gap-3 bg-white rounded-2xl border border-slate-200 p-4 shadow-sm min-h-[180px]">
+                <div class="text-slate-400 text-xs italic p-4 text-center">Loading live GDACS alerts...</div>
+            </div>
+        </div>
     </div>
 
     <!-- High-Priority Emergency Popup Modal -->
-    <div id="emergency-modal" class="modal-overlay hidden">
-        <div class="modal-card">
-            <div class="modal-header">
-                <span class="modal-badge">🚨 HIGH PRIORITY EMERGENCY DETECTED</span>
+    <div id="emergency-modal" class="fixed inset-0 w-screen h-screen bg-slate-900/40 backdrop-blur-sm z-[10000] flex items-center justify-center transition-all duration-300 hidden">
+        <div class="bg-white border border-slate-200 rounded-3xl w-[600px] max-w-[90vw] max-h-[85vh] p-8 shadow-2xl flex flex-col gap-6 overflow-y-auto relative text-slate-800">
+            <div class="flex items-start justify-between border-b border-slate-100 pb-4 mb-2">
+                <span class="bg-red-50 text-red-600 text-[11px] font-extrabold uppercase tracking-wider px-4 py-1.5 rounded-full border border-red-200 flex items-center gap-2">🚨 HIGH PRIORITY EMERGENCY DETECTED</span>
             </div>
-            <div class="modal-body">
-                <div class="modal-title-text" id="modal-title">Disaster Epicenter</div>
-                <div class="modal-field-row">
+            <div class="flex flex-col gap-4">
+                <div class="font-display text-2xl font-extrabold text-slate-900" id="modal-title">Disaster Epicenter</div>
+                
+                <div class="flex justify-between items-center text-sm text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-200">
                     <span>Severity Index:</span>
-                    <span class="modal-field-val" id="modal-severity" style="color: #f87171;">- / 10</span>
+                    <span class="font-mono font-bold text-red-600" id="modal-severity">- / 10</span>
                 </div>
-                <div class="modal-field-row">
+                <div class="flex justify-between items-center text-sm text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-200">
                     <span>🕒 Event Occurred:</span>
-                    <span class="modal-field-val" id="modal-time" style="color: #c084fc;">Just now</span>
+                    <span class="font-mono font-bold text-purple-600" id="modal-time">Just now</span>
                 </div>
-                <div class="modal-field-row">
+                <div class="flex justify-between items-center text-sm text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-200">
                     <span>Est. Affected Population (50km):</span>
-                    <span class="modal-field-val" id="modal-population" style="color: #38bdf8;">0 People</span>
+                    <span class="font-mono font-bold text-blue-600" id="modal-population">0 People</span>
                 </div>
-                <div class="modal-field-row">
+                <div class="flex justify-between items-center text-sm text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-200">
                     <span>💧 Required Water Allocation:</span>
-                    <span class="modal-field-val" id="modal-water" style="color: #38bdf8;">0 L</span>
+                    <span class="font-mono font-bold text-blue-600" id="modal-water">0 L</span>
                 </div>
-                <div class="modal-field-row">
+                <div class="flex justify-between items-center text-sm text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-200">
                     <span>🍱 Required Food Allocation:</span>
-                    <span class="modal-field-val" id="modal-food" style="color: #fbbf24;">0 Packs</span>
+                    <span class="font-mono font-bold text-amber-600" id="modal-food">0 Packs</span>
                 </div>
-                <div class="modal-field-row">
+                <div class="flex justify-between items-center text-sm text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-200">
                     <span>🛡️ Assigned Relief Depot:</span>
-                    <span class="modal-field-val" id="modal-depot" style="color: #34d399;">Nearest Depot</span>
+                    <span class="font-mono font-bold text-emerald-600" id="modal-depot">Nearest Depot</span>
                 </div>
                 
                 <!-- Multi-Modal Transport ETA Breakdown -->
-                <div style="margin-top: 12px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
-                    <div style="font-size: 11px; font-weight: 700; color: #cbd5e1; letter-spacing: 0.5px; text-transform: uppercase;">
+                <div class="mt-3 border-t border-slate-100 pt-4">
+                    <div class="text-[11px] font-bold text-slate-500 tracking-wide uppercase">
                         ⏱️ Estimated Response Time (ETA Breakdown):
                     </div>
-                    <div class="eta-card-grid">
-                        <div class="eta-mode-card" id="eta-card-land">
-                            <div class="eta-icon">🚚</div>
-                            <div class="eta-label">Land Convoy</div>
-                            <div class="eta-value" id="eta-val-land">--</div>
+                    <div class="grid grid-cols-3 gap-4 mt-4">
+                        <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center flex flex-col gap-2 transition-transform hover:-translate-y-1" id="eta-card-land">
+                            <div class="text-2xl">🚚</div>
+                            <div class="text-[11px] font-bold uppercase text-slate-500 tracking-wider">Land Convoy</div>
+                            <div class="font-mono text-base font-bold text-slate-900" id="eta-val-land">--</div>
                         </div>
-                        <div class="eta-mode-card" id="eta-card-air">
-                            <div class="eta-icon">🚁</div>
-                            <div class="eta-label">Air Helicopter</div>
-                            <div class="eta-value" id="eta-val-air">--</div>
+                        <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center flex flex-col gap-2 transition-transform hover:-translate-y-1" id="eta-card-air">
+                            <div class="text-2xl">🚁</div>
+                            <div class="text-[11px] font-bold uppercase text-slate-500 tracking-wider">Air Helicopter</div>
+                            <div class="font-mono text-base font-bold text-slate-900" id="eta-val-air">--</div>
                         </div>
-                        <div class="eta-mode-card" id="eta-card-water">
-                            <div class="eta-icon">🚢</div>
-                            <div class="eta-label">Rescue Boat</div>
-                            <div class="eta-value" id="eta-val-water">--</div>
+                        <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center flex flex-col gap-2 transition-transform hover:-translate-y-1" id="eta-card-water">
+                            <div class="text-2xl">🚢</div>
+                            <div class="text-[11px] font-bold uppercase text-slate-500 tracking-wider">Rescue Boat</div>
+                            <div class="font-mono text-base font-bold text-slate-900" id="eta-val-water">--</div>
                         </div>
                     </div>
-                    <div class="eta-rationale-box" id="modal-eta-rationale" style="display: none;"></div>
+                    <div class="mt-4 bg-amber-50 border border-amber-200 p-4 rounded-xl font-mono text-xs text-amber-900 leading-relaxed" id="modal-eta-rationale" style="display: none;"></div>
                 </div>
             </div>
-            <div class="modal-actions">
-                <button class="btn-modal-action btn-modal-route" id="btn-modal-route" onclick="acknowledgeAndRoute()">Acknowledge & Route</button>
-                <button class="btn-modal-action btn-modal-close" id="btn-modal-close" onclick="closeEmergencyModal()">Close</button>
+            <div class="flex gap-4 mt-4">
+                <button class="flex-1 p-3.5 font-sans text-sm font-bold rounded-xl border-none cursor-pointer transition-all bg-gradient-to-br from-emerald-600 to-emerald-700 text-white shadow-sm hover:shadow-md" id="btn-modal-route" onclick="acknowledgeAndRoute()">Acknowledge & Route</button>
+                <button class="flex-1 p-3.5 font-sans text-sm font-bold rounded-xl border border-slate-200 cursor-pointer transition-all bg-slate-100 text-slate-700 hover:bg-slate-200" id="btn-modal-close" onclick="closeEmergencyModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Raw Data & Open Datasets Explorer Modal -->
+    <div id="raw-data-modal" class="fixed inset-0 z-[10000] hidden items-center justify-center p-4 sm:p-8" style="background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(8px);">
+        <!-- Modal Backdrop -->
+        <div class="absolute inset-0 cursor-pointer" onclick="closeRawDataModal()"></div>
+        
+        <!-- Modal Card (Centered) -->
+        <div class="relative w-full max-w-6xl bg-white border border-slate-200 rounded-3xl shadow-2xl flex flex-col overflow-hidden m-auto" style="max-height: 82vh;">
+            <!-- Header -->
+            <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50 shrink-0">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 border border-blue-200 text-xl">
+                        🗄️
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h2 class="text-lg font-bold text-slate-900 tracking-tight">Open Datasets & Data Provenance Explorer</h2>
+                            <span class="text-[10px] font-bold uppercase bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-200">Verified Citable Sources</span>
+                        </div>
+                        <p class="text-xs text-slate-500 mt-0.5" id="raw-data-desc">Live verifiable CSV datasets powering the Rescura Sync machine learning models.</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button onclick="downloadCurrentCSV()" class="px-4 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 text-xs font-bold rounded-xl transition-all flex items-center gap-2 shadow-sm">
+                        <span>⬇️</span> Download CSV
+                    </button>
+                    <button onclick="closeRawDataModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-sm">
+                        ✕
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Dataset Tabs & Search Filter -->
+            <div class="px-6 pt-3 pb-3 border-b border-slate-100 bg-white shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div id="raw-data-tabs-container" class="flex gap-2 overflow-x-auto custom-scrollbar flex-1">
+                    <div class="text-slate-400 text-xs italic py-1">Loading datasets...</div>
+                </div>
+                <div class="sm:w-64">
+                    <input type="text" id="raw-data-search" onkeyup="filterCsvTable()" placeholder="🔍 Search records..." class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-all font-sans">
+                </div>
+            </div>
+
+            <!-- Content Area (Data Table) -->
+            <div class="flex-1 overflow-auto bg-slate-50 p-6 relative">
+                <table class="w-full text-left text-xs text-slate-700 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+                    <thead class="bg-slate-100 sticky top-0 border-b border-slate-200 shadow-sm z-10">
+                        <tr id="raw-data-thead-row">
+                            <th class="p-3 text-slate-600 font-bold uppercase tracking-wider text-[11px]">Loading...</th>
+                        </tr>
+                    </thead>
+                    <tbody id="raw-data-tbody" class="divide-y divide-slate-100">
+                        <!-- Data populated dynamically by App.js -->
+                    </tbody>
+                </table>
+                <div id="raw-data-loading" class="absolute inset-0 flex items-center justify-center bg-white/80 hidden">
+                    <div class="text-blue-600 font-bold animate-pulse text-xs">Fetching dataset from backend database...</div>
+                </div>
+            </div>
+            
+            <div class="text-xs text-slate-500 text-right shrink-0 p-3.5 border-t border-slate-100 bg-white flex justify-between items-center">
+                <span class="text-[11px] text-slate-400">Showing top 100 rows preview. Download CSV for the full historical archive.</span>
+                <span class="font-mono text-[11px] text-blue-600 font-bold">100% Citable & Verifiable</span>
             </div>
         </div>
     </div>
@@ -862,6 +440,6 @@
         crossorigin=""
     ></script>
     <!-- App Logic -->
-    <script src="app.js?v=20260810"></script>
+    <script src="App.js?v=20260817-fast-v3"></script>
 </body>
 </html>
