@@ -11,12 +11,12 @@
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" 
         crossorigin="" 
     />
-    <!-- Google Fonts: Inter & Outfit & Roboto Mono -->
+    <!-- Google Fonts: Inter only — one family carries the whole interface -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@500;600;700;800&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
     <!-- Global CSS Stylesheet -->
-    <link rel="stylesheet" href="style.css?v=20260817-clean-light">
+    <link rel="stylesheet" href="style.css?v=20260818-minimal">
 
     <!-- Supabase JS CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -44,262 +44,238 @@
       }
     </script>
 </head>
-<body class="min-h-screen bg-slate-50 text-slate-800 overflow-x-hidden font-sans">
+<body class="min-h-screen overflow-x-hidden font-sans">
+    <!-- Icon sprite: one stroked set at a shared weight, so icons read as a family -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+        <defs>
+            <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.4-3 8.3-7 9-4-.7-7-4.6-7-9V6l7-3z"/></symbol>
+            <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></symbol>
+            <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8l-5-5z"/><path d="M14 3v5h5"/></symbol>
+            <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></symbol>
+            <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 10-2.3 6.3"/><path d="M20 5v6h-6"/></symbol>
+            <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+            <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="M8 11l4 4 4-4"/><path d="M4 19h16"/></symbol>
+            <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></symbol>
+            <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M4 12h15"/><path d="M13 6l6 6-6 6"/></symbol>
+            <symbol id="i-radio" viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.5"/><path d="M7.5 7.5a6.4 6.4 0 000 9M16.5 16.5a6.4 6.4 0 000-9"/><path d="M4.5 4.5a10.6 10.6 0 000 15M19.5 19.5a10.6 10.6 0 000-15"/></symbol>
+            <symbol id="i-satellite" viewBox="0 0 24 24"><path d="M12 3a9 9 0 019 9"/><path d="M12 8a4 4 0 014 4"/><circle cx="6.5" cy="17.5" r="3.5"/></symbol>
+            <symbol id="i-news" viewBox="0 0 24 24"><path d="M4 5h13v14H5a1 1 0 01-1-1V5z"/><path d="M17 9h3v8a2 2 0 01-2 2h-1"/><path d="M7 9h7M7 13h7M7 16h4"/></symbol>
+            <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+        </defs>
+    </svg>
+
     <!-- Fixed Global Navigation Bar -->
     <nav class="global-navbar">
         <a href="index.html" class="nav-brand">
-            <span class="nav-brand-icon">🛡️</span>
-            <span>RESCURA SYNC</span>
+            <svg class="nav-brand-icon icon" aria-hidden="true"><use href="#i-shield"/></svg>
+            <span>Rescura Sync</span>
         </a>
         <div class="nav-links">
-            <a href="index.html" class="nav-link active">
-                <span>🗺️</span>
-                <span>Live Map</span>
-            </a>
-            <a href="analytics.html" class="nav-link">
-                <span>📊</span>
-                <span>Analytics Dashboard</span>
-            </a>
-            <a href="events.html" class="nav-link">
-                <span>⚠️</span>
-                <span>Disaster Events</span>
-            </a>
-            <a href="knowledge.html" class="nav-link">
-                <span>📖</span>
-                <span>Knowledge Base</span>
-            </a>
-            <a href="about.html" class="nav-link">
-                <span>ℹ️</span>
-                <span>About Us</span>
-            </a>
+            <a href="index.html" class="nav-link active">Live Map</a>
+            <a href="analytics.html" class="nav-link">Analytics</a>
+            <a href="events.html" class="nav-link">Events</a>
+            <a href="knowledge.html" class="nav-link">Knowledge</a>
+            <a href="about.html" class="nav-link">About</a>
         </div>
         <div class="nav-right-toolbar">
-            <button class="btn-nav-amber" id="btn-raw-data" onclick="openRawDataModal()" title="Inspect Database Datasets & Provenance">
-                <span>🗄️</span> Open Datasets
-            </button>
-            <button class="btn-nav-purple" id="btn-pdf-download" onclick="downloadActionPlanPDF(1)">
-                <span id="pdf-icon">📄</span> PDF
-            </button>
-            <button class="btn-nav-blue" id="btn-sync-ai" onclick="syncData()">
-                <span id="sync-icon">⚡</span> AI
-            </button>
-            <button class="btn-nav-teal" id="btn-refresh-logistics" onclick="refreshLogistics()">
-                <span id="refresh-icon">🔄</span>
-            </button>
             <div class="nav-status-badge">
-                <span>LIVE TELEMETRY</span>
+                <span>Live</span>
             </div>
+            <button class="btn-nav-amber" id="btn-raw-data" onclick="openRawDataModal()" title="Inspect database datasets &amp; provenance">
+                <svg class="icon icon-sm" aria-hidden="true"><use href="#i-database"/></svg>
+                <span class="btn-label">Datasets</span>
+            </button>
+            <button class="btn-nav-purple" id="btn-pdf-download" onclick="downloadActionPlanPDF(1)" title="Download action plan PDF">
+                <svg class="icon icon-sm" id="pdf-icon" aria-hidden="true"><use href="#i-file"/></svg>
+                <span class="btn-label">Report</span>
+            </button>
+            <button class="btn-nav-teal btn-icon" id="btn-refresh-logistics" onclick="refreshLogistics()" title="Refresh logistics" aria-label="Refresh logistics">
+                <svg class="icon icon-sm" id="refresh-icon" aria-hidden="true"><use href="#i-refresh"/></svg>
+            </button>
+            <button class="btn-nav-blue" id="btn-sync-ai" onclick="syncData()" title="Sync AI data">
+                <svg class="icon icon-sm" id="sync-icon" aria-hidden="true"><use href="#i-zap"/></svg>
+                <span class="btn-label">Sync AI</span>
+            </button>
         </div>
     </nav>
 
-    <!-- Map Section (Stats Positioned Cleanly Above Map) -->
-    <div class="w-full max-w-[1600px] mx-auto px-6 mt-24 mb-10 flex flex-col gap-5">
-        <!-- Top Stats Bar (Cleanly Positioned Above Map) -->
-        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            
-            <div class="bg-white border border-slate-200/90 rounded-2xl p-4 flex flex-col justify-between shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-blue-400 hover:shadow-md">
-                <div class="flex items-center justify-between mb-1">
-                    <span class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">Active Disasters</span>
-                    <span class="text-sm">🌍</span>
-                </div>
-                <span class="font-display text-2xl font-extrabold text-blue-600 leading-tight" id="stat-disasters">0</span>
+    <!-- Map Section -->
+    <div class="shell" style="margin-top: 88px; margin-bottom: 48px;">
+        <!-- Metric row: one shared strip, hairline-divided. No per-card colour. -->
+        <div class="metric-row" role="group" aria-label="Mission summary">
+            <div class="metric">
+                <span class="eyebrow">Active disasters</span>
+                <span class="metric-value" id="stat-disasters">0</span>
             </div>
-
-            <div class="bg-white border border-slate-200/90 rounded-2xl p-4 flex flex-col justify-between shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-sky-400 hover:shadow-md">
-                <div class="flex items-center justify-between mb-1">
-                    <span class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">Water Needed</span>
-                    <span class="text-sm">💧</span>
-                </div>
-                <span class="font-display text-2xl font-extrabold text-sky-600 font-mono leading-tight" id="total-water">0 L</span>
+            <div class="metric">
+                <span class="eyebrow">Water needed</span>
+                <span class="metric-value"><span id="total-water">0</span><span class="metric-unit">L</span></span>
             </div>
-
-            <div class="bg-white border border-slate-200/90 rounded-2xl p-4 flex flex-col justify-between shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-amber-400 hover:shadow-md">
-                <div class="flex items-center justify-between mb-1">
-                    <span class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">Food Needed</span>
-                    <span class="text-sm">🍱</span>
-                </div>
-                <span class="font-display text-2xl font-extrabold text-amber-600 font-mono leading-tight" id="total-food">0 Packs</span>
+            <div class="metric">
+                <span class="eyebrow">Food needed</span>
+                <span class="metric-value"><span id="total-food">0</span><span class="metric-unit">packs</span></span>
             </div>
-
-            <div class="bg-white border border-slate-200/90 rounded-2xl p-4 flex flex-col justify-between shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-purple-400 hover:shadow-md">
-                <div class="flex items-center justify-between mb-1">
-                    <span class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">Avg Rescue Time</span>
-                    <span class="text-sm">⏱️</span>
-                </div>
-                <span class="font-display text-2xl font-extrabold text-purple-600 font-mono leading-tight" id="avg-time">0 hrs</span>
+            <div class="metric">
+                <span class="eyebrow">Avg rescue time</span>
+                <span class="metric-value"><span id="avg-time">0</span><span class="metric-unit">hrs</span></span>
             </div>
-
-            <div class="bg-white border border-slate-200/90 rounded-2xl p-4 flex flex-col justify-between shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-red-400 hover:shadow-md">
-                <div class="flex items-center justify-between mb-1">
-                    <span class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">Pending SOS</span>
-                    <span class="text-sm">🚨</span>
-                </div>
-                <span class="font-display text-2xl font-extrabold text-red-600 font-mono leading-tight" id="stat-pending-sos">0</span>
+            <div class="metric">
+                <span class="eyebrow">Pending SOS</span>
+                <span class="metric-value" id="stat-pending-sos">0</span>
             </div>
-
-            <div class="bg-white border border-slate-200/90 rounded-2xl p-4 flex flex-col justify-between shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-emerald-400 hover:shadow-md">
-                <div class="flex items-center justify-between mb-1">
-                    <span class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">Dispatched</span>
-                    <span class="text-sm">🚚</span>
-                </div>
-                <span class="font-display text-2xl font-extrabold text-emerald-600 font-mono leading-tight" id="stat-dispatched">0</span>
+            <div class="metric">
+                <span class="eyebrow">Dispatched</span>
+                <span class="metric-value" id="stat-dispatched">0</span>
             </div>
-            
         </div>
-        
-        <!-- Leaflet Map Container (Unblocked & Full View) -->
-        <div class="relative w-full h-[620px] rounded-3xl overflow-hidden border border-slate-200 shadow-md">
-            <div id="map" class="w-full h-full z-0 bg-slate-50"></div>
+
+        <!-- Leaflet Map Container -->
+        <div class="map-frame">
+            <div id="map"></div>
         </div>
     </div>
 
     <!-- GDACS Overview & Hazard Assessment Section -->
-    <div class="w-full max-w-[1600px] mx-auto px-6 mb-12 flex flex-col xl:flex-row gap-8">
+    <div class="shell" style="margin-bottom: 48px;">
+      <div class="split">
         <!-- What is GDACS / Rescura Sync? -->
-        <div class="flex-1 bg-white border border-slate-200 rounded-2xl p-8 shadow-sm relative overflow-hidden">
-            <div class="absolute -top-24 -right-24 w-64 h-64 bg-blue-50 rounded-full blur-3xl pointer-events-none"></div>
-            
-            <h2 class="font-display text-2xl font-extrabold text-slate-900 mb-4 border-b border-slate-100 pb-4">What is GDACS? (Rescura Sync Integration)</h2>
-            <p class="text-slate-600 leading-relaxed mb-4 text-sm">
-                The Global Disaster Alert and Coordination System (GDACS) is a cooperation framework between the United Nations and the European Commission. It provides disaster managers and disaster information systems worldwide with real-time access to web-based disaster information systems and related coordination tools.
+        <div class="surface prose-panel">
+            <h2>What is GDACS?</h2>
+            <p>
+                The Global Disaster Alert and Coordination System is a cooperation framework between the United Nations and the European Commission. It gives disaster managers worldwide real-time access to web-based disaster information systems and related coordination tools.
             </p>
-            <p class="text-slate-600 leading-relaxed text-sm">
-                <strong>Rescura Sync</strong> integrates directly with the GDACS real-time data feeds, parsing automated estimates and risk analysis for sudden-onset disasters (provided by the European Commission Joint Research Centre). This allows rapid dispatch and logistics routing to the nearest supply depots globally.
+            <p>
+                <strong>Rescura Sync</strong> reads the GDACS real-time feeds directly, parsing automated estimates and risk analysis for sudden-onset disasters from the European Commission Joint Research Centre — which is what lets it route dispatch and logistics to the nearest supply depot.
             </p>
         </div>
 
         <!-- Hazard Assessment & Impact Estimation -->
-        <div class="xl:w-[450px] bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col gap-6 relative overflow-hidden">
-             <div class="absolute -bottom-24 -left-24 w-64 h-64 bg-amber-50 rounded-full blur-3xl pointer-events-none"></div>
+        <div class="surface prose-panel hazard-panel">
+             <h2>Live hazard assessment</h2>
 
-             <h3 class="font-display text-lg font-bold text-slate-900 flex items-center gap-2">
-                 <span class="text-amber-500">📊</span> Live Hazard Assessment
-             </h3>
-             
-             <div class="grid grid-cols-2 gap-4 flex-1">
-                 <div class="bg-slate-50 border border-slate-200/80 rounded-xl p-4 flex flex-col justify-center items-center text-center">
-                     <span class="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Total Active Events</span>
-                     <span class="text-3xl font-black text-slate-900" id="hazard-total-events">--</span>
+             <div class="hazard-grid">
+                 <div class="hazard-cell">
+                     <span class="eyebrow">Total active events</span>
+                     <span class="metric-value" id="hazard-total-events">--</span>
                  </div>
-                 <div class="bg-slate-50 border border-slate-200/80 rounded-xl p-4 flex flex-col justify-center items-center text-center">
-                     <span class="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Critical (Red/Orange)</span>
-                     <span class="text-3xl font-black text-red-600" id="hazard-critical-alerts">--</span>
+                 <div class="hazard-cell">
+                     <span class="eyebrow">Critical (red / orange)</span>
+                     <span class="metric-value sev-critical" id="hazard-critical-alerts">--</span>
                  </div>
-                 <div class="bg-slate-50 border border-slate-200/80 rounded-xl p-4 flex flex-col justify-center items-center text-center col-span-2">
-                     <span class="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Most Affected Region</span>
-                     <span class="text-lg font-bold text-blue-600" id="hazard-affected-region">Calculating...</span>
+                 <div class="hazard-cell hazard-cell-wide">
+                     <span class="eyebrow">Most affected region</span>
+                     <span class="metric-value" id="hazard-affected-region" style="font-size:17px;">Calculating…</span>
                  </div>
              </div>
-             
-             <a href="analytics.html" class="w-full py-3 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold tracking-wider uppercase rounded-xl border border-blue-200 transition-colors text-center block">
-                 Full Analytics & Predictions ➔
+
+             <a href="analytics.html" class="btn" style="width:100%;">
+                 Full analytics &amp; predictions
+                 <svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow-right"/></svg>
              </a>
         </div>
+      </div>
     </div>
 
     <!-- GDACS Disaster Columns (The 6 Feeds) -->
-    <div id="gdacs-events" class="w-full max-w-[1600px] mx-auto px-6 mb-16 scroll-mt-24">
-        <div class="flex items-center gap-4 mb-6">
-            <h2 class="font-display text-2xl font-extrabold text-slate-900">Live Disaster Event Feeds</h2>
-            <div class="flex-1 h-px bg-slate-200"></div>
+    <div id="gdacs-events" class="shell" style="margin-bottom: 48px; scroll-margin-top: 88px;">
+        <div class="section-head">
+            <div>
+                <h2>Live disaster event feeds</h2>
+                <p>Sudden-onset events from GDACS, grouped by hazard type.</p>
+            </div>
         </div>
-        
-        <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
+
+        <div class="feed-grid">
             <!-- Earthquakes -->
-            <div class="flex flex-col gap-3">
-                <div class="uppercase text-[11px] font-extrabold tracking-wider text-slate-600 border-b-2 border-emerald-500 pb-2 mb-2 flex items-center justify-between">
-                    <span class="flex items-center gap-2"><span class="text-emerald-600 text-lg">🌍</span> Earthquakes</span>
-                    <span class="bg-slate-100 px-2 py-0.5 rounded text-[10px] text-slate-700 font-bold" id="count-earthquake">0</span>
+            <div class="feed-col">
+                <div class="feed-col-head">
+                    <span>Earthquakes</span>
+                    <span class="feed-count" id="count-earthquake">0</span>
                 </div>
-                <div id="col-earthquake" class="flex flex-col gap-3 max-h-[500px] overflow-y-auto pr-1 custom-scrollbar"></div>
+                <div id="col-earthquake" class="feed-col-body"></div>
             </div>
             <!-- Tropical Cyclones -->
-            <div class="flex flex-col gap-3">
-                <div class="uppercase text-[11px] font-extrabold tracking-wider text-slate-600 border-b-2 border-blue-500 pb-2 mb-2 flex items-center justify-between">
-                    <span class="flex items-center gap-2"><span class="text-blue-600 text-lg">🌀</span> Cyclones</span>
-                    <span class="bg-slate-100 px-2 py-0.5 rounded text-[10px] text-slate-700 font-bold" id="count-cyclone">0</span>
+            <div class="feed-col">
+                <div class="feed-col-head">
+                    <span>Cyclones</span>
+                    <span class="feed-count" id="count-cyclone">0</span>
                 </div>
-                <div id="col-cyclone" class="flex flex-col gap-3 max-h-[500px] overflow-y-auto pr-1 custom-scrollbar"></div>
+                <div id="col-cyclone" class="feed-col-body"></div>
             </div>
             <!-- Floods -->
-            <div class="flex flex-col gap-3">
-                <div class="uppercase text-[11px] font-extrabold tracking-wider text-slate-600 border-b-2 border-teal-500 pb-2 mb-2 flex items-center justify-between">
-                    <span class="flex items-center gap-2"><span class="text-teal-600 text-lg">🌊</span> Floods</span>
-                    <span class="bg-slate-100 px-2 py-0.5 rounded text-[10px] text-slate-700 font-bold" id="count-flood">0</span>
+            <div class="feed-col">
+                <div class="feed-col-head">
+                    <span>Floods</span>
+                    <span class="feed-count" id="count-flood">0</span>
                 </div>
-                <div id="col-flood" class="flex flex-col gap-3 max-h-[500px] overflow-y-auto pr-1 custom-scrollbar"></div>
+                <div id="col-flood" class="feed-col-body"></div>
             </div>
             <!-- Volcanoes -->
-            <div class="flex flex-col gap-3">
-                <div class="uppercase text-[11px] font-extrabold tracking-wider text-slate-600 border-b-2 border-red-500 pb-2 mb-2 flex items-center justify-between">
-                    <span class="flex items-center gap-2"><span class="text-red-600 text-lg">🌋</span> Volcanoes</span>
-                    <span class="bg-slate-100 px-2 py-0.5 rounded text-[10px] text-slate-700 font-bold" id="count-volcano">0</span>
+            <div class="feed-col">
+                <div class="feed-col-head">
+                    <span>Volcanoes</span>
+                    <span class="feed-count" id="count-volcano">0</span>
                 </div>
-                <div id="col-volcano" class="flex flex-col gap-3 max-h-[500px] overflow-y-auto pr-1 custom-scrollbar"></div>
+                <div id="col-volcano" class="feed-col-body"></div>
             </div>
             <!-- Droughts -->
-            <div class="flex flex-col gap-3">
-                <div class="uppercase text-[11px] font-extrabold tracking-wider text-slate-600 border-b-2 border-amber-500 pb-2 mb-2 flex items-center justify-between">
-                    <span class="flex items-center gap-2"><span class="text-amber-600 text-lg">🏜️</span> Droughts</span>
-                    <span class="bg-slate-100 px-2 py-0.5 rounded text-[10px] text-slate-700 font-bold" id="count-drought">0</span>
+            <div class="feed-col">
+                <div class="feed-col-head">
+                    <span>Droughts</span>
+                    <span class="feed-count" id="count-drought">0</span>
                 </div>
-                <div id="col-drought" class="flex flex-col gap-3 max-h-[500px] overflow-y-auto pr-1 custom-scrollbar"></div>
+                <div id="col-drought" class="feed-col-body"></div>
             </div>
             <!-- Forest Fires -->
-            <div class="flex flex-col gap-3">
-                <div class="uppercase text-[11px] font-extrabold tracking-wider text-slate-600 border-b-2 border-orange-500 pb-2 mb-2 flex items-center justify-between">
-                    <span class="flex items-center gap-2"><span class="text-orange-600 text-lg">🔥</span> Forest Fires</span>
-                    <span class="bg-slate-100 px-2 py-0.5 rounded text-[10px] text-slate-700 font-bold" id="count-fire">0</span>
+            <div class="feed-col">
+                <div class="feed-col-head">
+                    <span>Forest fires</span>
+                    <span class="feed-count" id="count-fire">0</span>
                 </div>
-                <div id="col-fire" class="flex flex-col gap-3 max-h-[500px] overflow-y-auto pr-1 custom-scrollbar"></div>
+                <div id="col-fire" class="feed-col-body"></div>
             </div>
         </div>
     </div>
 
     <!-- Dynamic Live Info Blocks (Real GDACS & Copernicus Telemetry) -->
-    <div class="w-full max-w-[1600px] mx-auto px-6 mb-24 grid grid-cols-1 xl:grid-cols-3 gap-8">
-        
+    <div class="shell" style="margin-bottom: 64px;">
+      <div class="triple">
         <!-- Virtual OSOCC Live Telemetry -->
-        <div id="virtual-osocc" class="flex flex-col gap-4 scroll-mt-24">
-            <div class="flex items-center justify-between bg-blue-50 p-3 rounded-xl border border-blue-200">
-                <div class="flex items-center gap-3">
-                    <span class="text-blue-600 text-xl">💬</span>
-                    <h3 class="font-display font-bold text-base text-slate-900">Virtual OSOCC Live Telemetry</h3>
-                </div>
-                <span class="text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full border border-blue-200">UN Coordination Feed</span>
+        <section id="virtual-osocc" class="panel" style="scroll-margin-top: 88px;">
+            <header class="panel-head">
+                <svg class="icon icon-sm" aria-hidden="true"><use href="#i-radio"/></svg>
+                <h3>Virtual OSOCC telemetry</h3>
+                <span class="panel-source">UN coordination</span>
+            </header>
+            <div id="virtual-osocc-container" class="panel-body">
+                <div class="panel-empty">Loading coordinator feeds…</div>
             </div>
-            <div id="virtual-osocc-container" class="flex flex-col gap-3 bg-white rounded-2xl border border-slate-200 p-4 shadow-sm min-h-[180px]">
-                <div class="text-slate-400 text-xs italic p-4 text-center">Loading live Virtual OSOCC coordinator feeds...</div>
-            </div>
-        </div>
+        </section>
 
         <!-- Copernicus & Satellite GIS -->
-        <div id="maps-imagery" class="flex flex-col gap-4 scroll-mt-24">
-            <div class="flex items-center justify-between bg-emerald-50 p-3 rounded-xl border border-emerald-200">
-                <div class="flex items-center gap-3">
-                    <span class="text-emerald-600 text-xl">🛰️</span>
-                    <h3 class="font-display font-bold text-base text-slate-900">Copernicus & Satellite GIS</h3>
-                </div>
-                <span class="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200">Sentinel-2 & NASA</span>
+        <section id="maps-imagery" class="panel" style="scroll-margin-top: 88px;">
+            <header class="panel-head">
+                <svg class="icon icon-sm" aria-hidden="true"><use href="#i-satellite"/></svg>
+                <h3>Copernicus &amp; satellite GIS</h3>
+                <span class="panel-source">Sentinel-2 / NASA</span>
+            </header>
+            <div id="maps-imagery-container" class="panel-body panel-body-grid">
+                <div class="panel-empty">Loading satellite layers…</div>
             </div>
-            <div id="maps-imagery-container" class="grid grid-cols-2 gap-4">
-                <div class="text-slate-400 text-xs italic p-4 text-center col-span-2">Loading satellite layers...</div>
-            </div>
-        </div>
+        </section>
 
         <!-- GDACS & Emergency Bulletins -->
-        <div class="flex flex-col gap-4">
-            <div class="flex items-center justify-between bg-purple-50 p-3 rounded-xl border border-purple-200">
-                <div class="flex items-center gap-3">
-                    <span class="text-purple-600 text-xl">📰</span>
-                    <h3 class="font-display font-bold text-base text-slate-900">GDACS & Emergency Bulletins</h3>
-                </div>
-                <span class="text-[10px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full border border-purple-200">UN-OCHA RSS Live</span>
+        <section class="panel">
+            <header class="panel-head">
+                <svg class="icon icon-sm" aria-hidden="true"><use href="#i-news"/></svg>
+                <h3>Emergency bulletins</h3>
+                <span class="panel-source">UN-OCHA RSS</span>
+            </header>
+            <div id="gdacs-news-container" class="panel-body">
+                <div class="panel-empty">Loading live GDACS alerts…</div>
             </div>
-            <div id="gdacs-news-container" class="flex flex-col gap-3 bg-white rounded-2xl border border-slate-200 p-4 shadow-sm min-h-[180px]">
-                <div class="text-slate-400 text-xs italic p-4 text-center">Loading live GDACS alerts...</div>
-            </div>
-        </div>
+        </section>
+      </div>
     </div>
 
     <!-- High-Priority Emergency Popup Modal -->
@@ -440,6 +416,6 @@
         crossorigin=""
     ></script>
     <!-- App Logic -->
-    <script src="App.js?v=20260817-fast-v3"></script>
+    <script src="App.js?v=20260818-minimal"></script>
 </body>
 </html>

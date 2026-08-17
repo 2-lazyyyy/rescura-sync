@@ -7,55 +7,62 @@
     <!-- Google Fonts: Inter & Outfit -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
     <!-- Global CSS Stylesheet -->
-    <link rel="stylesheet" href="style.css?v=20260817-clean-light">
+    <link rel="stylesheet" href="style.css?v=20260818-minimal">
 </head>
 <body>
+    <!-- Icon sprite: one stroked set at a shared weight, so icons read as a family -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+        <defs>
+            <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.4-3 8.3-7 9-4-.7-7-4.6-7-9V6l7-3z"/></symbol>
+            <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></symbol>
+            <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8l-5-5z"/><path d="M14 3v5h5"/></symbol>
+            <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></symbol>
+            <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 10-2.3 6.3"/><path d="M20 5v6h-6"/></symbol>
+            <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+            <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="M8 11l4 4 4-4"/><path d="M4 19h16"/></symbol>
+            <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></symbol>
+            <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M4 12h15"/><path d="M13 6l6 6-6 6"/></symbol>
+            <symbol id="i-radio" viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.5"/><path d="M7.5 7.5a6.4 6.4 0 000 9M16.5 16.5a6.4 6.4 0 000-9"/><path d="M4.5 4.5a10.6 10.6 0 000 15M19.5 19.5a10.6 10.6 0 000-15"/></symbol>
+            <symbol id="i-satellite" viewBox="0 0 24 24"><path d="M12 3a9 9 0 019 9"/><path d="M12 8a4 4 0 014 4"/><circle cx="6.5" cy="17.5" r="3.5"/></symbol>
+            <symbol id="i-news" viewBox="0 0 24 24"><path d="M4 5h13v14H5a1 1 0 01-1-1V5z"/><path d="M17 9h3v8a2 2 0 01-2 2h-1"/><path d="M7 9h7M7 13h7M7 16h4"/></symbol>
+            <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+        </defs>
+    </svg>
+
         <!-- Fixed Global Navigation Bar -->
     <nav class="global-navbar">
         <a href="index.html" class="nav-brand">
-            <span class="nav-brand-icon">🛡️</span>
-            <span>RESCURA SYNC</span>
+            <svg class="nav-brand-icon icon" aria-hidden="true"><use href="#i-shield"/></svg>
+            <span>Rescura Sync</span>
         </a>
         <div class="nav-links">
-            <a href="index.html" class="nav-link">
-                <span>🗺️</span>
-                <span>Live Map</span>
-            </a>
-            <a href="analytics.html" class="nav-link">
-                <span>📊</span>
-                <span>Analytics Dashboard</span>
-            </a>
-            <a href="events.html" class="nav-link active">
-                <span>⚠️</span>
-                <span>Disaster Events</span>
-            </a>
-            <a href="knowledge.html" class="nav-link">
-                <span>📖</span>
-                <span>Knowledge Base</span>
-            </a>
-            <a href="about.html" class="nav-link">
-                <span>ℹ️</span>
-                <span>About Us</span>
-            </a>
+            <a href="index.html" class="nav-link">Live Map</a>
+            <a href="analytics.html" class="nav-link">Analytics</a>
+            <a href="events.html" class="nav-link active">Events</a>
+            <a href="knowledge.html" class="nav-link">Knowledge</a>
+            <a href="about.html" class="nav-link">About</a>
         </div>
         <div class="nav-right-toolbar">
-            <a href="index.html#raw-data-modal" onclick="window.location.href='index.html'; setTimeout(() => openRawDataModal(), 300); return false;" class="btn-nav-amber" id="btn-raw-data" title="Inspect Database Datasets & Provenance">
-                <span>🗄️</span> Open Datasets
-            </a>
-            <button class="btn-nav-purple" id="btn-pdf-download" onclick="downloadActionPlanPDF(1)">
-                <span id="pdf-icon">📄</span> PDF
-            </button>
-            <button class="btn-nav-blue" id="btn-sync-ai" onclick="syncData()">
-                <span id="sync-icon">⚡</span> AI
-            </button>
-            <button class="btn-nav-teal" id="btn-refresh-logistics" onclick="refreshLogistics()">
-                <span id="refresh-icon">🔄</span>
-            </button>
             <div class="nav-status-badge">
-                <span>LIVE TELEMETRY</span>
+                <span>Live</span>
             </div>
+            <a href="index.html" class="btn-nav-amber" id="btn-raw-data" title="Inspect database datasets &amp; provenance">
+                <svg class="icon icon-sm" aria-hidden="true"><use href="#i-database"/></svg>
+                <span class="btn-label">Datasets</span>
+            </a>
+            <button class="btn-nav-purple" id="btn-pdf-download" onclick="downloadActionPlanPDF(1)" title="Download action plan PDF">
+                <svg class="icon icon-sm" id="pdf-icon" aria-hidden="true"><use href="#i-file"/></svg>
+                <span class="btn-label">Report</span>
+            </button>
+            <button class="btn-nav-teal btn-icon" id="btn-refresh-logistics" onclick="refreshLogistics()" title="Refresh logistics" aria-label="Refresh logistics">
+                <svg class="icon icon-sm" id="refresh-icon" aria-hidden="true"><use href="#i-refresh"/></svg>
+            </button>
+            <button class="btn-nav-blue" id="btn-sync-ai" onclick="syncData()" title="Sync AI data">
+                <svg class="icon icon-sm" id="sync-icon" aria-hidden="true"><use href="#i-zap"/></svg>
+                <span class="btn-label">Sync AI</span>
+            </button>
         </div>
     </nav>
 
@@ -63,67 +70,71 @@
     <div class="page-wrapper">
         <div class="page-header">
             <div class="page-title-group">
-                <h1>⚠️ Active Disaster Events Log</h1>
-                <p>Real-time audit trail of global GDACS emergency alerts, spatial impact analyses, and AI-driven humanitarian supply allocations.</p>
+                <h1>Active disaster events</h1>
+                <p>Audit trail of global GDACS emergency alerts, spatial impact analyses, and AI-driven supply allocations.</p>
             </div>
         </div>
 
-        <!-- Summary Metric Cards -->
-        <div class="page-stats-grid">
-            <div class="stat-widget" style="padding: 16px;">
-                <span class="stat-label">Total Active Events</span>
-                <span class="stat-value" id="evt-stat-total">0</span>
+        <!-- Summary metrics -->
+        <div class="metric-row metric-row-4" role="group" aria-label="Events summary">
+            <div class="metric">
+                <span class="eyebrow">Total active events</span>
+                <span class="metric-value" id="evt-stat-total">0</span>
             </div>
-            <div class="stat-widget" style="padding: 16px;">
-                <span class="stat-label">Severe Disasters (Rating 7+)</span>
-                <span class="stat-value stat-pending" id="evt-stat-severe">0</span>
+            <div class="metric">
+                <span class="eyebrow">Severe (rating 7+)</span>
+                <span class="metric-value sev-critical" id="evt-stat-severe" style="font-size:24px;">0</span>
             </div>
-            <div class="stat-widget" style="padding: 16px;">
-                <span class="stat-label">Total Water Required</span>
-                <span class="stat-value stat-water" id="evt-stat-water">0 L</span>
+            <div class="metric">
+                <span class="eyebrow">Total water required</span>
+                <span class="metric-value" id="evt-stat-water">0</span>
             </div>
-            <div class="stat-widget" style="padding: 16px;">
-                <span class="stat-label">Total Food Required</span>
-                <span class="stat-value stat-food" id="evt-stat-food">0 Packs</span>
+            <div class="metric">
+                <span class="eyebrow">Total food required</span>
+                <span class="metric-value" id="evt-stat-food">0</span>
             </div>
         </div>
 
-        <!-- Table Filters & Search Bar -->
-        <div class="table-controls">
-            <div class="continent-filter-bar" style="border: none; padding: 0;">
-                <button class="continent-chip active" id="chip-all" onclick="filterEventsByContinent('All')">All Continents <span class="chip-count" id="cnt-all">0</span></button>
-                <button class="continent-chip" id="chip-asia" onclick="filterEventsByContinent('Asia')">🌏 Asia <span class="chip-count" id="cnt-asia">0</span></button>
-                <button class="continent-chip" id="chip-europe" onclick="filterEventsByContinent('Europe')">🌍 Europe <span class="chip-count" id="cnt-europe">0</span></button>
-                <button class="continent-chip" id="chip-americas" onclick="filterEventsByContinent('Americas')">🌎 Americas <span class="chip-count" id="cnt-americas">0</span></button>
-                <button class="continent-chip" id="chip-africa" onclick="filterEventsByContinent('Africa')">🌍 Africa <span class="chip-count" id="cnt-africa">0</span></button>
-                <button class="continent-chip" id="chip-oceania" onclick="filterEventsByContinent('Oceania')">🌏 Oceania <span class="chip-count" id="cnt-oceania">0</span></button>
+        <!-- Filters & search -->
+        <div class="filter-bar">
+            <div class="chip-row">
+                <button class="chip active" id="chip-all" onclick="filterEventsByContinent('All')">All <span class="chip-count" id="cnt-all">0</span></button>
+                <button class="chip" id="chip-asia" onclick="filterEventsByContinent('Asia')">Asia <span class="chip-count" id="cnt-asia">0</span></button>
+                <button class="chip" id="chip-europe" onclick="filterEventsByContinent('Europe')">Europe <span class="chip-count" id="cnt-europe">0</span></button>
+                <button class="chip" id="chip-americas" onclick="filterEventsByContinent('Americas')">Americas <span class="chip-count" id="cnt-americas">0</span></button>
+                <button class="chip" id="chip-africa" onclick="filterEventsByContinent('Africa')">Africa <span class="chip-count" id="cnt-africa">0</span></button>
+                <button class="chip" id="chip-oceania" onclick="filterEventsByContinent('Oceania')">Oceania <span class="chip-count" id="cnt-oceania">0</span></button>
             </div>
-            <input type="text" class="table-search-input" id="table-search" placeholder="🔍 Search event title or category..." onkeyup="filterEventsTable()">
+            <div class="search">
+                <svg class="icon icon-sm search-icon" aria-hidden="true"><use href="#i-search"/></svg>
+                <input type="text" class="input search-input-field" id="table-search" placeholder="Search events…" onkeyup="filterEventsTable()">
+            </div>
         </div>
 
         <!-- Data Table Container -->
-        <div class="glass-table-container">
-            <table class="glass-table">
-                <thead>
-                    <tr>
-                        <th>Disaster Event</th>
-                        <th>Category & Region</th>
-                        <th>Coordinates</th>
-                        <th>Occurred Date</th>
-                        <th>Severity</th>
-                        <th>Water Required</th>
-                        <th>Food Required</th>
-                        <th>Est. Budget</th>
-                        <th>Multi-Modal Dispatch ETAs (Land / Air / Water)</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="events-table-body">
-                    <tr>
-                        <td colspan="10" style="text-align: center; color: var(--accent-neon-blue); font-weight: 600; padding: 30px;">⚡ Synchronizing live emergency events...</td>
-                    </tr>
-                </tbody>
-            </table>
+        <div class="card">
+            <div class="table-scroll">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Event</th>
+                            <th>Region</th>
+                            <th>Occurred</th>
+                            <th class="num">Severity</th>
+                            <th class="num">Water</th>
+                            <th class="num">Food</th>
+                            <th class="num">Est. budget</th>
+                            <th>Dispatch ETA</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="events-table-body">
+                        <tr>
+                            <td colspan="9" class="table-empty">Synchronising live emergency events…</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 
@@ -148,6 +159,27 @@
         let rawEventsData = [];
         let activeContinent = 'All';
         let searchQuery = '';
+
+        /** Shortens a figure for a summary tile. */
+        function compactFigure(n) {
+            const num = Number(n) || 0;
+            if (num >= 1e9) return (num / 1e9).toFixed(1).replace(/\.0$/, '') + 'B';
+            if (num >= 1e6) return (num / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+            if (num >= 1e3) return (num / 1e3).toFixed(1).replace(/\.0$/, '') + 'K';
+            return num.toLocaleString();
+        }
+
+        /** Writes a metric as value + muted unit so long figures never wrap. */
+        function setMetric(el, value, unit) {
+            if (!el) return;
+            el.textContent = value;
+            if (unit) {
+                const u = document.createElement('span');
+                u.className = 'metric-unit';
+                u.textContent = unit;
+                el.appendChild(u);
+            }
+        }
 
         function downloadActionPlanPDF(evtId = 1) {
             const targetUrl = `${activeApiHost}/api/export-report/${evtId || 1}`;
@@ -380,8 +412,8 @@
             });
 
             document.getElementById('evt-stat-severe').innerText = severeCount;
-            document.getElementById('evt-stat-water').innerText = `${Math.round(totalWater).toLocaleString()} L`;
-            document.getElementById('evt-stat-food').innerText = `${Math.round(totalFood).toLocaleString()} Packs`;
+            setMetric(document.getElementById('evt-stat-water'), compactFigure(totalWater), 'L');
+            setMetric(document.getElementById('evt-stat-food'), compactFigure(totalFood), 'packs');
 
             ['all', 'asia', 'europe', 'americas', 'africa', 'oceania'].forEach(c => {
                 const key = c === 'all' ? 'All' : (c.charAt(0).toUpperCase() + c.slice(1));
@@ -390,11 +422,10 @@
             });
 
             if (!filtered.length) {
-                if (!rawEventsData.length) {
-                    tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: var(--accent-neon-blue); font-weight: 600; padding: 30px;">⚡ Synchronizing live GDACS emergency events...</td></tr>';
-                } else {
-                    tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: var(--text-muted); padding: 30px;">No matching disaster events found for this filter.</td></tr>';
-                }
+                const msg = rawEventsData.length
+                    ? 'No events match this filter.'
+                    : 'Synchronising live GDACS emergency events…';
+                tbody.innerHTML = `<tr><td colspan="9" class="table-empty">${msg}</td></tr>`;
                 return;
             }
 
@@ -419,37 +450,40 @@
                     ? evt.nearest_depot.eta_breakdown
                     : calculateClientETABreakdown(distKm, sev, title);
 
-                const etaCellHtml = `
-                    <div style="display: flex; flex-direction: column; gap: 3px; font-size: 11px;">
-                        <span style="color: ${eta.recommended_mode==='land'?'#b45309':'#475569'}; font-weight: ${eta.recommended_mode==='land'?'700':'500'}; background: ${eta.recommended_mode==='land'?'#fffbeb':'transparent'}; padding: 1px 6px; border-radius: 4px; ${eta.recommended_mode==='land'?'border: 1px solid #fde68a;':''}">🚚 <b>Land:</b> ${eta.modes.land.formatted_time}</span>
-                        <span style="color: ${eta.recommended_mode==='air'?'#b45309':'#475569'}; font-weight: ${eta.recommended_mode==='air'?'700':'500'}; background: ${eta.recommended_mode==='air'?'#fffbeb':'transparent'}; padding: 1px 6px; border-radius: 4px; ${eta.recommended_mode==='air'?'border: 1px solid #fde68a;':''}">🚁 <b>Air:</b> ${eta.modes.air.formatted_time}</span>
-                        <span style="color: ${eta.recommended_mode==='water'?'#b45309':'#475569'}; font-weight: ${eta.recommended_mode==='water'?'700':'500'}; background: ${eta.recommended_mode==='water'?'#fffbeb':'transparent'}; padding: 1px 6px; border-radius: 4px; ${eta.recommended_mode==='water'?'border: 1px solid #fde68a;':''}">🚢 <b>Water:</b> ${eta.modes.water.formatted_time}</span>
-                    </div>
-                `;
+                // The recommended mode is marked by weight alone; the other two
+                // stay muted, so the eye lands on the choice without a badge.
+                const etaRow = (mode, label) => {
+                    const best = eta.recommended_mode === mode;
+                    return `<span class="eta${best ? ' eta-best' : ''}">
+                        <span class="eta-mode">${label}</span>
+                        <span class="eta-time">${eta.modes[mode].formatted_time}</span>
+                    </span>`;
+                };
+                const etaCellHtml = `<div class="eta-stack">
+                    ${etaRow('land', 'Land')}
+                    ${etaRow('air', 'Air')}
+                    ${etaRow('water', 'Water')}
+                </div>`;
+
+                const sevClass = sev >= 7.0 ? 'critical' : (sev >= 5.0 ? 'warning' : 'ok');
 
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
-                    <td style="font-weight: 700; color: #0f172a;">⚠️ ${title}</td>
-                    <td><span class="badge-tag blue">${cont}</span></td>
-                    <td style="font-family: monospace; color: #64748b;">${lat.toFixed(3)}, ${lon.toFixed(3)}</td>
-                    <td style="color: #7c3aed; font-weight: 600;">🕒 ${timeStr}</td>
                     <td>
-                        <span style="font-weight: 800; font-size: 11.5px; color: ${sev >= 7.0 ? '#b91c1c' : (sev >= 5.0 ? '#b45309' : '#15803d')}; background: ${sev >= 7.0 ? '#fef2f2' : (sev >= 5.0 ? '#fffbeb' : '#f0fdf4')}; padding: 3px 8px; border-radius: 6px; border: 1px solid ${sev >= 7.0 ? '#fecaca' : (sev >= 5.0 ? '#fde68a' : '#bbf7d0')};">
-                            ${sev}/10
-                        </span>
+                        <div class="cell-title">${title}</div>
+                        <div class="cell-sub">${lat.toFixed(3)}, ${lon.toFixed(3)}</div>
                     </td>
-                    <td style="color: #0284c7; font-weight: 700; font-family: monospace;">${waterLiters.toLocaleString()} L</td>
-                    <td style="color: #d97706; font-weight: 700; font-family: monospace;">${foodPacks.toLocaleString()} Packs</td>
-                    <td style="color: #16a34a; font-weight: 800; font-family: monospace;">$${Math.round(estBudget).toLocaleString()} USD</td>
+                    <td class="muted">${cont}</td>
+                    <td class="muted">${timeStr}</td>
+                    <td class="num"><span class="sev sev-${sevClass}">${sev}</span></td>
+                    <td class="num">${waterLiters.toLocaleString()}<span class="unit">L</span></td>
+                    <td class="num">${foodPacks.toLocaleString()}<span class="unit">packs</span></td>
+                    <td class="num">$${Math.round(estBudget).toLocaleString()}</td>
                     <td>${etaCellHtml}</td>
                     <td>
-                        <div style="display: flex; gap: 8px; align-items: center;">
-                            <a href="index.html?lat=${lat}&lon=${lon}&title=${encodeURIComponent(title)}&sev=${sev}" class="btn-nav-blue" style="padding: 4px 10px; font-size: 11px; text-decoration: none;">
-                                🗺️ Map
-                            </a>
-                            <button onclick="downloadActionPlanPDF(${evt.id || 1})" class="btn-nav-purple" style="padding: 4px 10px; font-size: 11px;">
-                                📄 PDF
-                            </button>
+                        <div class="row-actions">
+                            <a href="index.html?lat=${lat}&lon=${lon}&title=${encodeURIComponent(title)}&sev=${sev}" class="btn btn-xs">Map</a>
+                            <button onclick="downloadActionPlanPDF(${evt.id || 1})" class="btn btn-xs">PDF</button>
                         </div>
                     </td>
                 `;

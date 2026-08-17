@@ -286,6 +286,65 @@ async function apiFetch(path, options = {}) {
 /**
  * Fetches mission analytics from Pandas API and updates the top stats bar widgets
  */
+/**
+ * Summary figures are for scanning, not auditing — a nine-digit litre count
+ * reads as noise. Compact anything past a thousand and keep the exact value
+ * in a title attribute for anyone who needs it.
+ */
+function compactNumber(n) {
+    const num = Number(n);
+    if (!isFinite(num)) return '0';
+    const abs = Math.abs(num);
+    if (abs >= 1e9) return (num / 1e9).toFixed(1).replace(/\.0$/, '') + 'B';
+    if (abs >= 1e6) return (num / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+    if (abs >= 1e3) return (num / 1e3).toFixed(1).replace(/\.0$/, '') + 'K';
+    return num.toLocaleString();
+}
+window.compactNumber = compactNumber;
+
+/**
+ * Severity maps to one of three status colours. Everything that shows a
+ * severity — dots, numbers, badges — goes through here so a "7.2" is the same
+ * colour wherever it appears.
+ */
+function severityClass(severity) {
+    const s = Number(severity);
+    if (s >= 7) return 'critical';
+    if (s >= 5) return 'warning';
+    return 'ok';
+}
+window.severityClass = severityClass;
+
+/**
+ * Map pins are plain severity-coloured discs. An emoji pin reads as clip-art at
+ * every zoom level and its colour carries no meaning; a disc does both jobs.
+ */
+function buildDisasterIcon(severity) {
+    return L.divIcon({
+        className: 'disaster-div-icon',
+        html: `<span class="map-pin map-pin-${severityClass(severity)}"></span>`,
+        iconSize: [14, 14],
+        iconAnchor: [7, 7]
+    });
+}
+window.buildDisasterIcon = buildDisasterIcon;
+
+/**
+ * Marks a toolbar button as working. CSS spins its icon; the label and layout
+ * stay put, so the toolbar doesn't reflow while a request is in flight.
+ */
+function setButtonBusy(btn, busy) {
+    if (!btn) return;
+    btn.disabled = busy;
+    btn.classList.toggle('is-busy', busy);
+    if (busy) {
+        btn.setAttribute('aria-busy', 'true');
+    } else {
+        btn.removeAttribute('aria-busy');
+    }
+}
+window.setButtonBusy = setButtonBusy;
+
 async function loadAnalytics() {
     try {
         const res = await apiFetch('/api/mission-analytics');
@@ -296,14 +355,18 @@ async function loadAnalytics() {
             const elTime = document.getElementById('avg-time');
             const elDisasters = document.getElementById('stat-disasters');
 
+            // Units live in the markup as a separate muted span, so the value
+            // element carries the number alone and never wraps mid-figure.
             if (elWater && data.sum_water_liters !== undefined) {
-                elWater.innerText = `${data.sum_water_liters.toLocaleString()} L`;
+                elWater.innerText = compactNumber(data.sum_water_liters);
+                elWater.title = `${data.sum_water_liters.toLocaleString()} litres`;
             }
             if (elFood && data.sum_food_packs !== undefined) {
-                elFood.innerText = `${data.sum_food_packs.toLocaleString()} Packs`;
+                elFood.innerText = compactNumber(data.sum_food_packs);
+                elFood.title = `${data.sum_food_packs.toLocaleString()} packs`;
             }
             if (elTime && data.mean_estimated_rescue_time !== undefined) {
-                elTime.innerText = `${data.mean_estimated_rescue_time} hrs`;
+                elTime.innerText = data.mean_estimated_rescue_time;
             }
             if (elDisasters && data.total_active_disasters !== undefined) {
                 elDisasters.innerText = data.total_active_disasters;
@@ -552,26 +615,9 @@ function renderSidebarCards() {
     if (alertsContainer) alertsContainer.innerHTML = '';
     if (sosContainer) sosContainer.innerHTML = '';
 
-    const getEmoji = (cont) => {
-        switch(cont) {
-            case 'Europe': return '🌍';
-            case 'Americas': return '🌎';
-            case 'Africa': return '🌍';
-            case 'Oceania': return '🌏';
-            default: return '🌏';
-        }
-    };
-
-    const getCategoryIcon = (cat) => {
-        switch(cat) {
-            case 'Tropical Cyclone': return '🌀';
-            case 'Flood': return '🌊';
-            case 'Volcano': return '🌋';
-            case 'Drought': return '🏜️';
-            case 'Forest Fire': return '🔥';
-            default: return '🌍';
-        }
-    };
+    // Region and hazard type are read as words, not decoded from emoji.
+    const getEmoji = () => '';
+    const getCategoryIcon = () => '';
 
     let counts = {
         'Earthquake': 0, 'Tropical Cyclone': 0, 'Flood': 0,
@@ -613,14 +659,10 @@ function renderSidebarCards() {
                 else if (rawType.includes('fire') || rawType.includes('wildfire') || /\b(wf)\b/.test(rawType)) cat = 'Forest Fire';
 
                 const sev = alert.severity || 5.0;
-                const sevBadge = sev >= 7.0
-                    ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-red-50 text-red-700 border border-red-200">${sev}/10</span>`
-                    : (sev >= 5.0
-                        ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-50 text-amber-700 border border-amber-200">${sev}/10</span>`
-                        : `<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">${sev}/10</span>`);
+                const sevClass = severityClass(sev);
 
                 const card = document.createElement('div');
-                card.className = 'bg-white border border-slate-200/90 hover:border-blue-400 rounded-xl p-3.5 transition-all duration-200 cursor-pointer flex flex-col gap-2 relative shadow-sm hover:shadow-md group';
+                card.className = 'event-card';
                 card.setAttribute('data-disaster-id', disasterId);
                 card.onclick = (e) => {
                     if (e.target.closest('button')) return;
@@ -629,19 +671,17 @@ function renderSidebarCards() {
                 };
 
                 card.innerHTML = `
-                    <div class="flex justify-between items-center">
-                        <div class="text-[11px] font-bold text-slate-500 flex items-center gap-1.5">
-                            <span>${getCategoryIcon(cat)}</span>
-                            <span class="uppercase tracking-wider text-[10px] font-extrabold text-slate-600">${cat}</span>
-                            <span class="text-slate-300">&bull;</span>
-                            <span>${getEmoji(cont)} ${cont}</span>
-                        </div>
-                        ${sevBadge}
+                    <div class="event-card-meta">
+                        <span class="dot dot-${sevClass}"></span>
+                        <span>${cat}</span>
+                        <span class="event-card-sep">/</span>
+                        <span>${cont}</span>
+                        <span class="sev sev-${sevClass}" style="margin-left:auto">${sev}</span>
                     </div>
-                    <div class="text-xs font-bold text-slate-900 leading-snug group-hover:text-blue-600 transition-colors line-clamp-2">${alert.title}</div>
-                    <div class="flex justify-between items-center mt-1 pt-2 border-t border-slate-100">
-                        <span class="text-[10px] text-slate-500 font-mono flex items-center gap-1">🕒 ${timeStr}</span>
-                        <button class="bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-0.5 rounded text-[10px] font-bold text-blue-700 tracking-wider transition-colors" onclick="event.stopPropagation(); downloadActionPlanPDF(${alert.id || 1})">PDF</button>
+                    <div class="event-card-title">${alert.title}</div>
+                    <div class="event-card-foot">
+                        <span class="event-card-time">${timeStr}</span>
+                        <button class="btn btn-xs btn-quiet" onclick="event.stopPropagation(); downloadActionPlanPDF(${alert.id || 1})">PDF</button>
                     </div>
                 `;
                 alertsContainer.appendChild(card);
@@ -671,10 +711,10 @@ function renderSidebarCards() {
         const cont = getContinent(lat, lon, alert.title);
         
         const disasterId = String(alert.id || alert.title || `gdacs_${index}`);
-        const sevColor = alert.severity >= 7 ? 'text-red-600' : (alert.severity >= 5 ? 'text-amber-600' : 'text-emerald-600');
+        const sevClass = severityClass(alert.severity);
 
         const card = document.createElement('div');
-        card.className = 'bg-white border border-slate-200 hover:border-blue-400 rounded-xl p-3.5 transition-all duration-200 cursor-pointer flex flex-col gap-2 relative shadow-sm hover:shadow-md';
+        card.className = 'event-card';
         card.setAttribute('data-disaster-id', disasterId);
         card.onclick = (e) => {
             if (e.target.closest('button')) return;
@@ -683,14 +723,15 @@ function renderSidebarCards() {
         };
 
         card.innerHTML = `
-            <div class="flex justify-between items-start">
-                <div class="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-1">${getEmoji(cont)} ${cont}</div>
-                <div class="text-[11px] font-black ${sevColor}">${alert.severity}/10</div>
+            <div class="event-card-meta">
+                <span class="dot dot-${sevClass}"></span>
+                <span>${cont}</span>
+                <span class="sev sev-${sevClass}" style="margin-left:auto">${alert.severity}</span>
             </div>
-            <div class="text-xs font-bold text-slate-900 leading-snug hover:text-blue-600 transition-colors line-clamp-2">${alert.title}</div>
-            <div class="flex justify-between items-center mt-1 pt-2 border-t border-slate-100">
-                <span class="text-[10px] text-slate-500 font-mono flex items-center gap-1">🕒 ${timeStr}</span>
-                <button class="bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-0.5 rounded text-[10px] font-bold text-blue-700 tracking-wider" onclick="event.stopPropagation(); downloadActionPlanPDF(${alert.id || 1})">PDF</button>
+            <div class="event-card-title">${alert.title}</div>
+            <div class="event-card-foot">
+                <span class="event-card-time">${timeStr}</span>
+                <button class="btn btn-xs btn-quiet" onclick="event.stopPropagation(); downloadActionPlanPDF(${alert.id || 1})">PDF</button>
             </div>
         `;
         container.appendChild(card);
@@ -763,9 +804,9 @@ function renderLiveInfoBlocks(disasters) {
     if (osoccContainer) {
         const topEvents = disasters.slice(0, 3);
         const roles = [
-            { agency: "UN-OCHA Dispatch", action: "Logistics corridor & medical airlift mobilized", icon: "🚁" },
-            { agency: "WFP Logistics Cluster", action: "Potable water & ration staging underway", icon: "💧" },
-            { agency: "AHA Centre", action: "Situation report & regional stockpile release", icon: "🛡️" }
+            { agency: "UN-OCHA Dispatch", action: "Logistics corridor & medical airlift mobilized" },
+            { agency: "WFP Logistics Cluster", action: "Potable water & ration staging underway" },
+            { agency: "AHA Centre", action: "Situation report & regional stockpile release" }
         ];
 
         osoccContainer.innerHTML = topEvents.map((evt, idx) => {
@@ -773,21 +814,15 @@ function renderLiveInfoBlocks(disasters) {
             const lat = evt.latitude !== undefined ? evt.latitude : (evt.lat !== undefined ? evt.lat : 0);
             const lon = evt.longitude !== undefined ? evt.longitude : (evt.lon !== undefined ? evt.lon : 0);
             const timeAgo = formatOccurredTime(evt.created_at || evt.pubDate || new Date().toISOString());
-            const titleSafe = (evt.title || 'Active Emergency').replace(/'/g, "\\'");
             return `
-                <div onclick="focusDisasterOnMap(${lat}, ${lon}, '${encodeURIComponent(evt.title || '')}', ${evt.severity || 7.0})" class="flex gap-3 items-start border-b border-slate-100 last:border-0 pb-3 last:pb-0 cursor-pointer group hover:bg-blue-50/60 p-2 rounded-xl transition-all">
-                    <div class="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-sm shrink-0 border border-blue-200 group-hover:scale-105 transition-transform">
-                        ${role.icon}
+                <div onclick="focusDisasterOnMap(${lat}, ${lon}, '${encodeURIComponent(evt.title || '')}', ${evt.severity || 7.0})" class="feed-row">
+                    <div class="feed-row-top">
+                        <span class="feed-row-title">${evt.title}</span>
+                        <span class="feed-row-time">${timeAgo}</span>
                     </div>
-                    <div class="flex-1 min-w-0">
-                        <div class="flex items-center justify-between gap-1">
-                            <span class="text-xs font-bold text-slate-900 group-hover:text-blue-600 truncate">${evt.title}</span>
-                            <span class="text-[10px] font-mono text-slate-400 shrink-0">${timeAgo}</span>
-                        </div>
-                        <div class="text-[11px] text-blue-700 font-semibold mt-0.5 flex items-center gap-1">
-                            <span class="w-1.5 h-1.5 rounded-full bg-blue-600 inline-block"></span>
-                            <span>${role.agency}:</span> <span class="text-slate-600 font-normal truncate">${role.action}</span>
-                        </div>
+                    <div class="feed-row-sub">
+                        <span class="feed-row-agency">${role.agency}</span>
+                        <span>${role.action}</span>
                     </div>
                 </div>
             `;
@@ -798,29 +833,23 @@ function renderLiveInfoBlocks(disasters) {
     const satContainer = document.getElementById('maps-imagery-container');
     if (satContainer) {
         satContainer.innerHTML = `
-            <div onclick="toggleSatelliteLayer(true)" class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm group cursor-pointer hover:border-emerald-400 hover:shadow-md transition-all flex flex-col justify-between">
-                <div class="h-24 bg-slate-900 w-full relative overflow-hidden flex items-center justify-center">
-                    <img src="https://images.unsplash.com/photo-1541888087425-ce81dfc469ea?q=80&w=400&auto=format&fit=crop" class="w-full h-full object-cover opacity-85 group-hover:scale-105 transition-transform duration-300">
-                    <span class="absolute top-2 right-2 bg-black/70 text-emerald-400 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">Copernicus EMS</span>
+            <div onclick="toggleSatelliteLayer(true)" class="layer-card">
+                <div class="layer-thumb">
+                    <img src="https://images.unsplash.com/photo-1541888087425-ce81dfc469ea?q=80&w=400&auto=format&fit=crop" alt="" loading="lazy">
                 </div>
-                <div class="p-3">
-                    <div class="text-xs font-bold text-slate-900 group-hover:text-emerald-700 leading-tight">Sentinel-2 Multispectral Infrared</div>
-                    <div class="text-[10.5px] text-slate-500 mt-1 flex items-center gap-1">
-                        <span class="text-emerald-600">📡</span> Click to activate Satellite Layer on map
-                    </div>
+                <div class="layer-body">
+                    <div class="layer-title">Sentinel-2 multispectral infrared</div>
+                    <div class="layer-sub">Copernicus EMS &middot; activate layer</div>
                 </div>
             </div>
 
-            <div onclick="toggleSatelliteLayer(true)" class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm group cursor-pointer hover:border-blue-400 hover:shadow-md transition-all flex flex-col justify-between">
-                <div class="h-24 bg-slate-900 w-full relative overflow-hidden flex items-center justify-center">
-                    <img src="https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=400&auto=format&fit=crop" class="w-full h-full object-cover opacity-85 group-hover:scale-105 transition-transform duration-300">
-                    <span class="absolute top-2 right-2 bg-black/70 text-blue-400 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border border-blue-500/30">NASA GIBS</span>
+            <div onclick="toggleSatelliteLayer(true)" class="layer-card">
+                <div class="layer-thumb">
+                    <img src="https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=400&auto=format&fit=crop" alt="" loading="lazy">
                 </div>
-                <div class="p-3">
-                    <div class="text-xs font-bold text-slate-900 group-hover:text-blue-700 leading-tight">Earth Observation & Risk Damage</div>
-                    <div class="text-[10.5px] text-slate-500 mt-1 flex items-center gap-1">
-                        <span class="text-blue-600">🛰️</span> Click to view high-res Earth imagery
-                    </div>
+                <div class="layer-body">
+                    <div class="layer-title">Earth observation &amp; risk damage</div>
+                    <div class="layer-sub">NASA GIBS &middot; high-res imagery</div>
                 </div>
             </div>
         `;
@@ -841,17 +870,18 @@ function renderLiveInfoBlocks(disasters) {
             const dateStr = evt.created_at || "Recent Bulletin";
             const lat = evt.latitude !== undefined ? evt.latitude : (evt.lat !== undefined ? evt.lat : 0);
             const lon = evt.longitude !== undefined ? evt.longitude : (evt.lon !== undefined ? evt.lon : 0);
+            const sev = evt.severity || 7.0;
+            const sevClass = severityClass(sev);
             return `
-                <div onclick="focusDisasterOnMap(${lat}, ${lon}, '${encodeURIComponent(evt.title || '')}', ${evt.severity || 7.0})" class="border-b border-slate-100 last:border-0 pb-3 last:pb-0 cursor-pointer group hover:bg-purple-50/50 p-2 rounded-xl transition-all">
-                    <div class="flex items-center justify-between gap-2">
-                        <span class="text-[10px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded uppercase border border-purple-200">${agency}</span>
-                        <span class="text-[10.5px] font-mono text-slate-400">${dateStr}</span>
+                <div onclick="focusDisasterOnMap(${lat}, ${lon}, '${encodeURIComponent(evt.title || '')}', ${sev})" class="feed-row">
+                    <div class="feed-row-top">
+                        <span class="feed-row-agency">${agency}</span>
+                        <span class="feed-row-time">${dateStr}</span>
                     </div>
-                    <div class="text-xs font-bold text-slate-900 group-hover:text-purple-700 transition-colors mt-1.5 truncate leading-snug">
-                        ${evt.title}
-                    </div>
-                    <div class="text-[11px] text-slate-500 mt-0.5">
-                        Severity index: <b class="text-red-600 font-mono">${evt.severity || 7.0}/10</b> &bull; Click to zoom epicenter ➔
+                    <div class="feed-row-title" style="margin-top:4px">${evt.title}</div>
+                    <div class="feed-row-sub">
+                        <span class="dot dot-${sevClass}"></span>
+                        <span>Severity <span class="sev sev-${sevClass}">${sev}</span></span>
                     </div>
                 </div>
             `;
@@ -1128,14 +1158,7 @@ async function fetchReliefData(lat = 17.3333, lon = 96.4833, severity = 7.5, tit
                 map.removeLayer(activeMarker);
             }
 
-            const disasterIcon = L.divIcon({
-                className: 'disaster-div-icon',
-                html: '⚠️',
-                iconSize: [32, 32],
-                iconAnchor: [16, 16]
-            });
-
-            activeMarker = L.marker([lat, lon], { icon: disasterIcon })
+            activeMarker = L.marker([lat, lon], { icon: buildDisasterIcon(severity) })
                 .addTo(map)
                 .bindPopup(popupContent)
                 .openPopup();
@@ -1332,9 +1355,9 @@ async function loadAllDepots() {
                 if (!existing) {
                     const depotIcon = L.divIcon({
                         className: 'depot-div-icon',
-                        html: `<div style="font-size: 26px; filter: drop-shadow(0 0 8px rgba(34, 197, 94, 0.9));">🛡️</div>`,
-                        iconSize: [32, 32],
-                        iconAnchor: [16, 16]
+                        html: '<span class="map-pin map-pin-depot"></span>',
+                        iconSize: [14, 14],
+                        iconAnchor: [7, 7]
                     });
                     const depotMarker = L.marker([depot.latitude, depot.longitude], { icon: depotIcon })
                         .addTo(map)
@@ -1473,14 +1496,7 @@ async function initializeDashboard() {
                 </div>
             `;
 
-            const disasterIcon = L.divIcon({
-                className: 'disaster-div-icon',
-                html: '⚠️',
-                iconSize: [32, 32],
-                iconAnchor: [16, 16]
-            });
-
-            const marker = L.marker([lat, lon], { icon: disasterIcon })
+            const marker = L.marker([lat, lon], { icon: buildDisasterIcon(event.severity) })
                 .addTo(map)
                 .bindPopup(popupContent);
 
@@ -1534,10 +1550,9 @@ function handleUrlLocationParams() {
 async function syncData() {
     const btn = document.getElementById('btn-sync-ai');
     
-    if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<span>⏳</span> Training & Syncing AI...';
-    }
+    // Toggle a busy class rather than rewriting innerHTML — the button keeps
+    // its icon and its responsive label, and the width never jumps.
+    setButtonBusy(btn, true);
 
     try {
         await Promise.all([
@@ -1550,10 +1565,7 @@ async function syncData() {
     } catch (err) {
         console.error('Failed to sync AI data:', err);
     } finally {
-        if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = '<span id="sync-icon">⚡</span> Sync AI Data';
-        }
+        setButtonBusy(btn, false);
     }
 }
 
@@ -1562,20 +1574,14 @@ async function syncData() {
  */
 async function refreshLogistics() {
     const btn = document.getElementById('btn-refresh-logistics');
-    if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<span>⏳</span> Refreshing...';
-    }
+    setButtonBusy(btn, true);
     try {
         await loadAnalytics();
         await initializeDashboard();
     } catch (err) {
         console.error('Failed to refresh logistics:', err);
     } finally {
-        if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = '<span id="refresh-icon">🔄</span> Refresh Logistics';
-        }
+        setButtonBusy(btn, false);
     }
 }
 
@@ -1681,6 +1687,7 @@ function calculateClientETABreakdown(distKm, severity, title) {
  * Populates and displays the high-priority emergency modal popup for events in Myanmar & ASEAN
  */
 function displayEmergencyModal(payload) {
+    return; // TEMP: emergency popup disabled
     if (!payload || !payload.latitude || !payload.longitude) return;
 
     const processedIds = getProcessedEmergencyIds();
