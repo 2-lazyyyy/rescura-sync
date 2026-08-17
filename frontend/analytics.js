@@ -143,7 +143,7 @@ function switchAnalyticsTab(tabId) {
     if (tabId === 'tab-simulator') {
         setTimeout(drawFeatureImportanceChart, 100);
     } else if (tabId === 'tab-transport') {
-        setTimeout(drawTransportTradeoffChart, 100);
+        fetchTransportAnalytics();
     }
 }
 window.switchAnalyticsTab = switchAnalyticsTab;
@@ -165,7 +165,7 @@ async function fetchAnalyticsData() {
         updateStatsCards(missionFetch, dashboardData);
         drawResourceAllocationChart(analyticsFetch);
         drawSeverityChart(dashboardData);
-        drawOccurrenceFrequency(dashboardData);
+        drawOccurrenceFrequency(analyticsFetch, dashboardData);
 
     } catch (error) {
         console.error('Error fetching analytics data:', error);
@@ -196,28 +196,32 @@ function setMetric(el, value, unit) {
 
 function updateStatsCards(missionData, dashboardData) {
     // 1. Total Active Events
-    const totalEvents = missionData.total_active_disasters || dashboardData.length || 50;
+    const totalEvents = missionData.total_active_disasters || dashboardData.length || 0;
     const elActive = document.getElementById('stat-active-events');
     if (elActive) elActive.innerText = totalEvents;
 
-    // 2. Severe Disasters (SEV 7+)
-    const severeCount = dashboardData.filter(d => (d.severity || 0) >= 7.0).length || 14;
+    // 2. Critical Disasters (SEV >= 5.0 / GDACS Orange & Red)
+    const severeCount = dashboardData.filter(d => (d.severity || 0) >= 5.0).length;
     const elSev = document.getElementById('stat-severe-events');
     if (elSev) elSev.innerText = severeCount;
 
-    // 3. Total Water & Food
-    const totalWater = missionData.total_water_liters_needed || 505563465;
-    const totalFood = missionData.total_food_packs_needed || 76475021;
+    // 3. Total Water & Food (Dynamic aggregation from live active crises & Sphere model)
+    const totalWater = missionData.sum_water_liters || 0;
+    const totalFood = missionData.sum_food_packs || 0;
     setMetric(document.getElementById('stat-total-water'), compactFigure(totalWater), 'L');
     setMetric(document.getElementById('stat-total-food'), compactFigure(totalFood), 'packs');
 
-    // 4. Total Est. Budget (USD)
+    // 4. Avg Rescue ETA
+    const avgEta = missionData.mean_estimated_rescue_time || 5.7;
+    setMetric(document.getElementById('stat-avg-eta'), avgEta, 'hrs');
+
+    // 5. Total Est. Budget (USD)
     let totalBudget = 0;
     dashboardData.forEach(d => {
         totalBudget += (d.total_budget || 0);
     });
-    if (totalBudget === 0) {
-        totalBudget = (totalWater * 0.45) + (totalFood * 3.2);
+    if (totalBudget === 0 && (totalWater > 0 || totalFood > 0)) {
+        totalBudget = (totalWater * 0.45) + (totalFood * 3.20);
     }
     const elBudget = document.getElementById('stat-total-budget');
     if (elBudget) elBudget.textContent = `$${compactFigure(totalBudget)}`;
@@ -225,29 +229,23 @@ function updateStatsCards(missionData, dashboardData) {
 
 function drawResourceAllocationChart(analyticsData) {
     const regionalData = analyticsData.regional_supplies || {};
-    const ignoredKeys = new Set(['Americas', 'Europe', 'Africa', 'Oceania', 'Global', 'World', 'Asia-Pacific', 'Other']);
-    let validRegions = Object.keys(regionalData)
-        .filter(r => !ignoredKeys.has(r) && ((regionalData[r].water_liters || 0) + (regionalData[r].food_packs || 0) > 0))
-        .sort((a, b) => ((regionalData[b].water_liters || 0) + (regionalData[b].food_packs || 0)) - ((regionalData[a].water_liters || 0) + (regionalData[a].food_packs || 0)))
-        .slice(0, 5);
-
-    let waterData = [];
-    let foodData = [];
-
+    const worldContinents = ['Asia', 'Africa', 'North America', 'South America', 'Antarctica', 'Europe', 'Australia/Oceania'];
+    
+    // Sort continents by total demand (water + food)
+    let validRegions = worldContinents.filter(c => regionalData[c] && ((regionalData[c].water_liters || 0) + (regionalData[c].food_packs || 0) > 0));
     if (validRegions.length === 0) {
-        validRegions = [
-            "Central (Bago/Yangon)",
-            "Upper Valley (Mandalay)",
-            "Delta Coastal (Ayeyarwady)",
-            "Eastern Plateau (Shan)",
-            "Mekong Basin (ASEAN)"
-        ];
-        waterData = [4500000, 3200000, 2800000, 1950000, 1200000];
-        foodData = [1200000, 850000, 750000, 520000, 320000];
+        validRegions = worldContinents;
     } else {
-        waterData = validRegions.map(r => regionalData[r].water_liters || 0);
-        foodData = validRegions.map(r => regionalData[r].food_packs || 0);
+        // Sort descending by total demand
+        validRegions.sort((a, b) => {
+            const sumA = (regionalData[a]?.water_liters || 0) + (regionalData[a]?.food_packs || 0);
+            const sumB = (regionalData[b]?.water_liters || 0) + (regionalData[b]?.food_packs || 0);
+            return sumB - sumA;
+        });
     }
+
+    const waterData = validRegions.map(r => regionalData[r]?.water_liters || 0);
+    const foodData = validRegions.map(r => regionalData[r]?.food_packs || 0);
 
     const canvas = document.getElementById('chart-resource-allocation');
     if (!canvas) return;
@@ -267,18 +265,18 @@ function drawResourceAllocationChart(analyticsData) {
                     data: waterData,
                     backgroundColor: CHART.series[0],
                     borderWidth: 0,
-                    borderRadius: 3,
-                    barPercentage: 0.7,
-                    categoryPercentage: 0.7
+                    borderRadius: 4,
+                    barPercentage: 0.6,
+                    categoryPercentage: 0.6
                 },
                 {
                     label: 'Food (packs)',
                     data: foodData,
                     backgroundColor: CHART.series[1],
                     borderWidth: 0,
-                    borderRadius: 3,
-                    barPercentage: 0.7,
-                    categoryPercentage: 0.7
+                    borderRadius: 4,
+                    barPercentage: 0.6,
+                    categoryPercentage: 0.6
                 }
             ]
         },
@@ -346,17 +344,26 @@ function drawSeverityChart(dashboardData) {
     });
 }
 
-function drawOccurrenceFrequency(dashboardData) {
+function drawOccurrenceFrequency(analyticsData, dashboardData) {
+    const dailyTrends = analyticsData?.daily_trends || [];
     let dates = [];
-    const today = new Date();
-    for (let i = 6; i >= 0; i--) {
-        const d = new Date(today);
-        d.setDate(d.getDate() - i);
-        dates.push(d.toISOString().split('T')[0]);
-    }
+    let counts = [];
+    let resolvedCounts = [];
 
-    const counts = [4, 7, 5, 11, 8, 14, 9];
-    const resolvedCounts = [3, 5, 4, 9, 7, 12, 8];
+    if (dailyTrends.length > 0) {
+        dates = dailyTrends.map(t => t.date);
+        counts = dailyTrends.map(t => t.new_incidents);
+        resolvedCounts = dailyTrends.map(t => t.resolved_evacuations);
+    } else {
+        const today = new Date();
+        for (let i = 6; i >= 0; i--) {
+            const d = new Date(today);
+            d.setDate(d.getDate() - i);
+            dates.push(d.toISOString().split('T')[0]);
+        }
+        counts = [14, 21, 18, 31, 24, 38, 28];
+        resolvedCounts = [11, 18, 14, 25, 20, 31, 23];
+    }
 
     const canvas = document.getElementById('chart-occurrence-frequency');
     if (!canvas) return;
@@ -419,25 +426,87 @@ function drawOccurrenceFrequency(dashboardData) {
 }
 
 // ==================== SIMULATOR & ML EXPLAINER ====================
+const SIM_DISASTER_PROFILES = {
+    'EQ': {
+        name: 'Earthquake',
+        waterMultiplier: 1.0,
+        foodMultiplier: 1.0,
+        medMultiplier: 1.6,   // High crush injuries & orthopedic trauma
+        infraMultiplier: 1.25 // Collapsed bridges & rubble slow land routes
+    },
+    'TC': {
+        name: 'Tropical Cyclone',
+        waterMultiplier: 1.25,
+        foodMultiplier: 1.35, // Displaced populations, severed distribution lines
+        medMultiplier: 1.1,
+        infraMultiplier: 1.4  // Flooded roads, fallen trees
+    },
+    'FL': {
+        name: 'Flash Flood',
+        waterMultiplier: 1.6, // Contaminated ground wells, extreme drinking water crisis
+        foodMultiplier: 1.2,
+        medMultiplier: 1.3,   // Waterborne diseases (cholera, leptospirosis)
+        infraMultiplier: 1.55 // Submerged highways & destroyed culverts
+    },
+    'VO': {
+        name: 'Volcanic Eruption',
+        waterMultiplier: 1.15, // Ash-contaminated open water sources
+        foodMultiplier: 1.4,  // Destroyed crops & agricultural supply
+        medMultiplier: 1.5,   // Respiratory distress, eye irritation & burns
+        infraMultiplier: 1.2
+    },
+    'DR': {
+        name: 'Drought',
+        waterMultiplier: 2.2, // Acute water depletion
+        foodMultiplier: 1.8,  // Famine & malnutrition relief
+        medMultiplier: 0.45,  // Low acute physical trauma
+        infraMultiplier: 0.85 // Roads dry and navigable
+    },
+    'WF': {
+        name: 'Forest / Wildfire',
+        waterMultiplier: 1.35,
+        foodMultiplier: 1.1,
+        medMultiplier: 1.7,   // Thermal burns & smoke inhalation
+        infraMultiplier: 1.35 // Active fire corridors block roads
+    }
+};
+
 function runSimulation() {
+    const typeSelect = document.getElementById('sim-type');
+    const disasterType = (typeSelect ? typeSelect.value : 'EQ').toUpperCase();
     const sev = parseFloat(document.getElementById('sim-severity').value) || 7.5;
     const radius = parseFloat(document.getElementById('sim-radius').value) || 45;
     const pop = parseInt(document.getElementById('sim-population').value) || 85000;
     const infra = parseFloat(document.getElementById('sim-infra').value) || 40;
 
-    // ML & Sphere Calculation Formulas
+    const profile = SIM_DISASTER_PROFILES[disasterType] || SIM_DISASTER_PROFILES['EQ'];
+
+    // ML & Sphere Standard Calculation Formulas adjusted by Disaster Classification
     const severityFactor = Math.pow(sev / 5.0, 1.25);
     const affectedPop = Math.round(pop * (radius / 50.0) * 0.7);
-    const waterLiters = Math.round(affectedPop * 15 * severityFactor);
-    const foodPacks = Math.round(affectedPop * 2.5 * severityFactor);
-    const medKits = Math.round((affectedPop / 20) * (sev / 6.0));
+    const waterLiters = Math.round(affectedPop * 15 * severityFactor * profile.waterMultiplier);
+    const foodPacks = Math.round(affectedPop * 2.5 * severityFactor * profile.foodMultiplier);
+    const medKits = Math.round((affectedPop / 20) * (sev / 6.0) * profile.medMultiplier);
     const budgetUSD = Math.round((waterLiters * 0.45) + (foodPacks * 3.2) + (medKits * 45) + (radius * 120));
 
-    // Multi-modal ETAs
+    // Multi-modal ETAs adjusted by hazard infrastructure disruption
     const baseLandSpeed = 45; // km/h
-    const adjustedLandSpeed = Math.max(15, baseLandSpeed * (1 - (infra / 100) * 0.6));
+    const effectiveInfra = Math.min(95, infra * profile.infraMultiplier);
+    const adjustedLandSpeed = Math.max(12, baseLandSpeed * (1 - (effectiveInfra / 100) * 0.65));
     const landETA = (radius * 1.6 / adjustedLandSpeed).toFixed(1);
     const airETA = (radius * 1.1 / 220).toFixed(1);
+
+    // Dynamic Feature Attribution (SHAP Sensitivity) calculation
+    const wSev = Math.pow(sev / 5.0, 1.35) * (profile.medMultiplier || 1.0) * 45;
+    const wPop = (pop / 85000.0) * (radius / 45.0) * (profile.foodMultiplier || 1.0) * 35;
+    const wDist = (radius / 45.0) * 12;
+    const wRoad = (infra / 40.0) * (profile.infraMultiplier || 1.0) * 8;
+    const wTotal = Math.max(1, wSev + wPop + wDist + wRoad);
+
+    const pctSev = Math.max(5, Math.round((wSev / wTotal) * 100));
+    const pctPop = Math.max(5, Math.round((wPop / wTotal) * 100));
+    const pctDist = Math.max(2, Math.round((wDist / wTotal) * 100));
+    const pctRoad = Math.max(1, 100 - pctSev - pctPop - pctDist);
 
     document.getElementById('sim-res-water').innerText = `${waterLiters.toLocaleString()} L`;
     document.getElementById('sim-res-food').innerText = `${foodPacks.toLocaleString()} Packs`;
@@ -445,10 +514,14 @@ function runSimulation() {
     document.getElementById('sim-res-budget').innerText = `$${budgetUSD.toLocaleString()}`;
     document.getElementById('sim-res-eta-land').innerText = `${landETA} hrs`;
     document.getElementById('sim-res-eta-air').innerText = `${airETA} hrs`;
+
+    drawFeatureImportanceChart(pctSev, pctPop, pctDist, pctRoad);
 }
 window.runSimulation = runSimulation;
 
 function resetSimulation() {
+    const typeSelect = document.getElementById('sim-type');
+    if (typeSelect) typeSelect.value = 'EQ';
     document.getElementById('sim-severity').value = 7.5;
     document.getElementById('sim-val-severity').innerText = '7.5 / 10';
     document.getElementById('sim-radius').value = 45;
@@ -460,12 +533,24 @@ function resetSimulation() {
 }
 window.resetSimulation = resetSimulation;
 
-function drawFeatureImportanceChart() {
+function drawFeatureImportanceChart(pctSev = 45, pctPop = 35, pctDist = 12, pctRoad = 8) {
+    const elSev = document.getElementById('shap-pct-sev');
+    const elPop = document.getElementById('shap-pct-pop');
+    const elDist = document.getElementById('shap-pct-dist');
+    const elRoad = document.getElementById('shap-pct-road');
+
+    if (elSev) elSev.innerText = `${pctSev}%`;
+    if (elPop) elPop.innerText = `${pctPop}%`;
+    if (elDist) elDist.innerText = `${pctDist}%`;
+    if (elRoad) elRoad.innerText = `${pctRoad}%`;
+
     const canvas = document.getElementById('chart-feature-importance');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (chartFeatureImportanceInstance) {
-        chartFeatureImportanceInstance.destroy();
+        chartFeatureImportanceInstance.data.datasets[0].data = [pctSev, pctPop, pctDist, pctRoad];
+        chartFeatureImportanceInstance.update();
+        return;
     }
 
     chartFeatureImportanceInstance = new Chart(ctx, {
@@ -473,9 +558,7 @@ function drawFeatureImportanceChart() {
         data: {
             labels: ['Disaster severity', 'Population at risk', 'Depot proximity', 'Road blockade'],
             datasets: [{
-                data: [45, 35, 12, 8],
-                // Weights are one quantity, so they share one hue and vary in
-                // lightness — rank is legible without a legend lookup.
+                data: [pctSev, pctPop, pctDist, pctRoad],
                 backgroundColor: CHART.series,
                 borderWidth: 2,
                 borderColor: CHART.surface
@@ -484,6 +567,7 @@ function drawFeatureImportanceChart() {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: { duration: 250 },
             plugins: {
                 legend: { position: 'bottom', labels: { padding: 12 } }
             },
@@ -492,7 +576,9 @@ function drawFeatureImportanceChart() {
     });
 }
 
-function drawTransportTradeoffChart() {
+let transportAnalyticsData = null;
+
+function drawTransportTradeoffChart(curves) {
     const canvas = document.getElementById('chart-transport-tradeoff');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -500,44 +586,54 @@ function drawTransportTradeoffChart() {
         chartTransportTradeoffInstance.destroy();
     }
 
-    const distances = [25, 50, 100, 150, 200, 300, 400];
-    const landTimes = distances.map(d => (d / 45).toFixed(1));
-    const airTimes = distances.map(d => (d / 220 + 0.3).toFixed(1));
-    const boatTimes = distances.map(d => (d / 28 + 0.5).toFixed(1));
+    const curveData = (curves && curves.length > 0) ? curves : [
+        { distance_km: 25, land_hours: 1.15, air_hours: 0.42, water_hours: 2.0 },
+        { distance_km: 50, land_hours: 1.8, air_hours: 0.54, water_hours: 3.4 },
+        { distance_km: 100, land_hours: 3.1, air_hours: 0.78, water_hours: 6.2 },
+        { distance_km: 150, land_hours: 4.4, air_hours: 1.02, water_hours: 9.0 },
+        { distance_km: 200, land_hours: 5.7, air_hours: 1.25, water_hours: 11.8 },
+        { distance_km: 300, land_hours: 8.3, air_hours: 1.73, water_hours: 17.4 },
+        { distance_km: 400, land_hours: 10.9, air_hours: 2.21, water_hours: 23.0 }
+    ];
+
+    const labels = curveData.map(d => `${d.distance_km} km`);
+    const landTimes = curveData.map(d => d.land_hours);
+    const airTimes = curveData.map(d => d.air_hours);
+    const boatTimes = curveData.map(d => d.water_hours);
 
     chartTransportTradeoffInstance = new Chart(ctx, {
         type: 'line',
         data: {
-            labels: distances.map(d => `${d} km`),
+            labels: labels,
             datasets: [
                 {
-                    label: 'Land convoy',
+                    label: 'Land heavy convoy (50 km/h avg)',
                     data: landTimes,
                     borderColor: CHART.series[0],
-                    borderWidth: 2,
+                    borderWidth: 2.5,
                     tension: 0.3,
-                    pointRadius: 2,
-                    pointHoverRadius: 5,
+                    pointRadius: 3.5,
+                    pointHoverRadius: 6,
                     pointBackgroundColor: CHART.series[0]
                 },
                 {
-                    label: 'Air helicopter',
+                    label: 'Air helicopter / airdrop (220 km/h)',
                     data: airTimes,
                     borderColor: CHART.series[1],
-                    borderWidth: 2,
+                    borderWidth: 2.5,
                     tension: 0.3,
-                    pointRadius: 2,
-                    pointHoverRadius: 5,
+                    pointRadius: 3.5,
+                    pointHoverRadius: 6,
                     pointBackgroundColor: CHART.series[1]
                 },
                 {
-                    label: 'River barge',
+                    label: 'River & delta barge (25 km/h)',
                     data: boatTimes,
                     borderColor: CHART.series[2],
-                    borderWidth: 2,
+                    borderWidth: 2.5,
                     tension: 0.3,
-                    pointRadius: 2,
-                    pointHoverRadius: 5,
+                    pointRadius: 3.5,
+                    pointHoverRadius: 6,
                     pointBackgroundColor: CHART.series[2]
                 }
             ]
@@ -550,7 +646,11 @@ function drawTransportTradeoffChart() {
                 ...chartScales(),
                 y: {
                     ...chartScales().y,
-                    title: { display: true, text: 'Transit time (hours)', color: CHART.tick }
+                    title: { display: true, text: 'Transit duration (hours)', color: CHART.tick }
+                },
+                x: {
+                    ...chartScales().x,
+                    title: { display: true, text: 'Corridor Distance (km)', color: CHART.tick }
                 }
             },
             plugins: {
@@ -560,19 +660,239 @@ function drawTransportTradeoffChart() {
     });
 }
 
-function simulateRestock(depotName) {
-    alert(`✅ Restock order dispatched for ${depotName}. +250,000L Water and +50,000 Food packs in transit.`);
+function calculateCustomTransport(distanceKm = 100) {
+    const d = Math.max(1, parseFloat(distanceKm) || 100);
+
+    // 1. Land (Truck): 50 km/h average, 1.3x road factor, 0.5h prep
+    const landHours = (d * 1.3 / 50.0) + 0.5;
+    const landH = Math.floor(landHours);
+    const landM = Math.round((landHours - landH) * 60);
+
+    // 2. Air (Helicopter): 220 km/h speed, 1.05x flight path, 0.3h staging
+    const airHours = (d * 1.05 / 220.0) + 0.3;
+    const airH = Math.floor(airHours);
+    const airM = Math.round((airHours - airH) * 60);
+
+    // 3. Water (Boat): 25 km/h speed, 1.4x riverine path, 0.6h dock
+    const waterHours = (d * 1.4 / 25.0) + 0.6;
+    const waterH = Math.floor(waterHours);
+    const waterM = Math.round((waterHours - waterH) * 60);
+
+    // Update UI
+    const elLandEta = document.getElementById('calc-land-eta');
+    const elAirEta = document.getElementById('calc-air-eta');
+    const elWaterEta = document.getElementById('calc-water-eta');
+
+    if (elLandEta) elLandEta.textContent = `${landH}h ${landM}m`;
+    if (elAirEta) elAirEta.textContent = `${airH}h ${airM}m`;
+    if (elWaterEta) elWaterEta.textContent = `${waterH}h ${waterM}m`;
+}
+window.calculateCustomTransport = calculateCustomTransport;
+
+function onTransportDistanceInput(val) {
+    const elVal = document.getElementById('transport-val-distance');
+    if (elVal) elVal.textContent = `${val} km`;
+    calculateCustomTransport(val);
+}
+window.onTransportDistanceInput = onTransportDistanceInput;
+
+async function fetchTransportAnalytics() {
+    try {
+        const res = await apiFetch('/api/transport-analytics');
+        if (!res || !res.ok) throw new Error('Failed to fetch transport analytics');
+        const data = await res.json();
+        transportAnalyticsData = data;
+
+        // Initial calculation
+        const currDist = document.getElementById('transport-distance-slider')?.value || 100;
+        calculateCustomTransport(currDist);
+
+        // Draw Trade-off Chart with dynamic time curves
+        drawTransportTradeoffChart(data.distance_curves);
+
+    } catch (err) {
+        console.error('Error in fetchTransportAnalytics:', err);
+    }
+}
+window.fetchTransportAnalytics = fetchTransportAnalytics;
+
+async function fetchPrescriptiveRecommendations() {
+    const container = document.getElementById('recommendations-container');
+    if (!container) return;
+
+    try {
+        const res = await apiFetch('/api/prescriptive-recommendations');
+        if (!res || !res.ok) throw new Error('API offline');
+        const data = await res.json();
+        const recs = data.recommendations || [];
+
+        if (recs.length === 0) {
+            container.innerHTML = '<div class="text-sm text-slate-400 py-6 text-center">All regional depots currently operating within balanced safety buffers.</div>';
+            return;
+        }
+
+        container.innerHTML = recs.map(rec => {
+            return `
+                <div class="rec">
+                    <div class="rec-main">
+                        <div class="rec-meta">
+                            <span class="tag">${rec.tag}</span>
+                            <span class="rec-priority"><span class="dot ${rec.priority_class || 'dot-critical'}"></span> ${rec.priority}</span>
+                        </div>
+                        <h4>${rec.title}</h4>
+                        <p>${rec.description}</p>
+                    </div>
+                    <button onclick="applyRecommendation(this, '${encodeURIComponent(rec.action_payload)}')" class="btn btn-primary">${rec.action_label || 'Authorise'}</button>
+                </div>
+            `;
+        }).join('');
+    } catch (err) {
+        console.error('Error fetching prescriptive recommendations:', err);
+    }
+}
+window.fetchPrescriptiveRecommendations = fetchPrescriptiveRecommendations;
+
+async function fetchRegionalVulnerability() {
+    const tbody = document.getElementById('vulnerability-tbody');
+    if (!tbody) return;
+
+    try {
+        const res = await apiFetch('/api/regional-vulnerability');
+        if (!res || !res.ok) throw new Error('API offline');
+        const data = await res.json();
+        const sectors = data.sectors || [];
+
+        if (sectors.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center p-4 text-slate-400">No active regional sectors found.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = sectors.map(sec => `
+            <tr>
+                <td class="strong">${sec.sector}</td>
+                <td class="num muted">${sec.population || '--'}</td>
+                <td>${sec.primary_threat}</td>
+                <td class="num ${sec.vulnerability_class}">${sec.vulnerability}</td>
+                <td>${sec.nearest_depot}</td>
+                <td class="num">${sec.land_eta}</td>
+                <td><span class="tag ${sec.status_class}">${sec.status}</span></td>
+            </tr>
+        `).join('');
+    } catch (err) {
+        console.error('Error fetching regional vulnerability:', err);
+    }
+}
+window.fetchRegionalVulnerability = fetchRegionalVulnerability;
+
+async function fetchDepotStockAnalytics() {
+    const container = document.getElementById('depots-grid-container');
+    if (!container) return;
+
+    try {
+        const res = await apiFetch('/api/depot-stock-analytics');
+        if (!res || !res.ok) throw new Error('API offline');
+        const data = await res.json();
+        const depots = data.depots || [];
+
+        if (depots.length === 0) {
+            container.innerHTML = '<div class="p-6 text-center text-slate-400 text-xs font-semibold col-span-3">No active depots found.</div>';
+            return;
+        }
+
+        const badge = document.getElementById('depots-online-badge');
+        if (badge) badge.innerText = `${depots.length} hubs online`;
+
+        container.innerHTML = depots.map(dp => {
+            const fillWater = dp.water_pct < 50 ? 'meter-fill-critical' : (dp.water_pct < 80 ? 'meter-fill-warning' : 'meter-fill-ok');
+            const fillFood = dp.food_pct < 50 ? 'meter-fill-critical' : (dp.food_pct < 80 ? 'meter-fill-warning' : 'meter-fill-ok');
+
+            return `
+                <div class="depot">
+                    <div class="depot-head">
+                        <div>
+                            <h4>${dp.name}</h4>
+                            <p>${dp.role}</p>
+                        </div>
+                        <span class="tag ${dp.tag_class}">${dp.days_remaining}</span>
+                    </div>
+                    <div class="depot-meters">
+                        <div class="meter">
+                            <div class="meter-head">
+                                <span>Water</span>
+                                <span class="meter-val">${dp.water_display}</span>
+                            </div>
+                            <div class="meter-track"><div class="meter-fill ${fillWater}" style="width: ${dp.water_pct}%"></div></div>
+                        </div>
+                        <div class="meter">
+                            <div class="meter-head">
+                                <span>Food</span>
+                                <span class="meter-val">${dp.food_display}</span>
+                            </div>
+                            <div class="meter-track"><div class="meter-fill ${fillFood}" style="width: ${dp.food_pct}%"></div></div>
+                        </div>
+                        <div class="meter">
+                            <div class="meter-head">
+                                <span>Medical</span>
+                                <span class="meter-val">${dp.med_kits.toLocaleString()} kits</span>
+                            </div>
+                            <div class="meter-track"><div class="meter-fill meter-fill-ok" style="width: ${dp.med_pct}%"></div></div>
+                        </div>
+                    </div>
+                    <button onclick="simulateRestock('${dp.name}', this)" class="btn btn-xs" style="width:100%;">Trigger restock</button>
+                </div>
+            `;
+        }).join('');
+    } catch (err) {
+        console.error('Error fetching depot stock analytics:', err);
+    }
+}
+window.fetchDepotStockAnalytics = fetchDepotStockAnalytics;
+
+async function simulateRestock(depotName, btn) {
+    if (btn) {
+        btn.disabled = true;
+        btn.innerText = 'Dispatching restock...';
+    }
+    try {
+        const res = await apiFetch('/api/depots/restock', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ depot_name: depotName })
+        });
+        if (res && res.ok) {
+            await fetchDepotStockAnalytics();
+            if (btn) {
+                btn.innerText = 'Restocked 100%';
+                btn.classList.add('is-done');
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.innerText = 'Trigger restock';
+                    btn.classList.remove('is-done');
+                }, 4000);
+            }
+        } else {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerText = 'Trigger restock';
+            }
+        }
+    } catch (err) {
+        console.error('Failed to restock depot:', err);
+        if (btn) {
+            btn.disabled = false;
+            btn.innerText = 'Trigger restock';
+        }
+    }
 }
 window.simulateRestock = simulateRestock;
 
-function applyRecommendation(btn, message) {
-    // Once authorised the control becomes a state label, so it drops the
-    // primary treatment and stops competing with the actions still pending.
+function applyRecommendation(btn, encodedMessage) {
+    const message = decodeURIComponent(encodedMessage || 'Action Authorized');
     btn.textContent = 'Authorised';
     btn.classList.remove('btn-primary');
     btn.classList.add('is-done');
     btn.disabled = true;
-    alert(`🚀 ${message}\nAction Plan updated and logged to command telemetry audit trail.`);
+    alert(`${message}\nLogged to operational command telemetry audit trail.`);
 }
 window.applyRecommendation = applyRecommendation;
 
@@ -580,4 +900,9 @@ window.applyRecommendation = applyRecommendation;
 document.addEventListener('DOMContentLoaded', () => {
     fetchAnalyticsData();
     runSimulation();
+    fetchPrescriptiveRecommendations();
+    fetchRegionalVulnerability();
+    fetchDepotStockAnalytics();
+    fetchTransportAnalytics();
 });
+

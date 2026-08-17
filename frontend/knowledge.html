@@ -48,20 +48,13 @@
             <div class="nav-status-badge">
                 <span>Live</span>
             </div>
-            <a href="index.html" class="btn-nav-amber" id="btn-raw-data" title="Inspect database datasets &amp; provenance">
+            <button class="btn-nav-amber" id="btn-raw-data" onclick="openRawDataModal()" title="Inspect database datasets &amp; provenance">
                 <svg class="icon icon-sm" aria-hidden="true"><use href="#i-database"/></svg>
                 <span class="btn-label">Datasets</span>
-            </a>
-            <button class="btn-nav-purple" id="btn-pdf-download" onclick="downloadActionPlanPDF(1)" title="Download action plan PDF">
-                <svg class="icon icon-sm" id="pdf-icon" aria-hidden="true"><use href="#i-file"/></svg>
-                <span class="btn-label">Report</span>
             </button>
-            <button class="btn-nav-teal btn-icon" id="btn-refresh-logistics" onclick="refreshLogistics()" title="Refresh logistics" aria-label="Refresh logistics">
-                <svg class="icon icon-sm" id="refresh-icon" aria-hidden="true"><use href="#i-refresh"/></svg>
-            </button>
-            <button class="btn-nav-blue" id="btn-sync-ai" onclick="syncData()" title="Sync AI data">
-                <svg class="icon icon-sm" id="sync-icon" aria-hidden="true"><use href="#i-zap"/></svg>
-                <span class="btn-label">Sync AI</span>
+            <button class="btn-nav-blue" id="btn-sync-ai" onclick="syncData()" title="Refresh live data">
+                <svg class="icon icon-sm" id="sync-icon" aria-hidden="true"><use href="#i-refresh"/></svg>
+                <span class="btn-label">Refresh Data</span>
             </button>
         </div>
     </nav>

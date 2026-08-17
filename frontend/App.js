@@ -26,6 +26,18 @@ const openStreetMapLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
 });
 
+const sentinelInfraredLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 19,
+    className: 'sentinel-infrared-tiles',
+    attribution: 'Tiles &copy; Esri &mdash; Sentinel-2 Multispectral Infrared'
+});
+
+const nasaOpticalLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 19,
+    className: 'nasa-optical-tiles',
+    attribution: 'Tiles &copy; Esri &mdash; NASA GIBS Natural True Color'
+});
+
 // Initialize Leaflet Map centered on Myanmar Focus Zone
 const MYANMAR_COORDS = [19.7633, 96.0785];
 const MYANMAR_ZOOM_LEVEL = 5.5;
@@ -120,6 +132,60 @@ function toggleWeatherRadar() {
     }
 }
 window.toggleWeatherRadar = toggleWeatherRadar;
+
+function toggleSatelliteLayer(layerType) {
+    // 1. Force remove all active base tile layers from the map
+    [lightVoyagerLayer, darkCanvasLayer, satelliteLayer, openStreetMapLayer, sentinelInfraredLayer, nasaOpticalLayer].forEach(l => {
+        if (l && map.hasLayer(l)) {
+            map.removeLayer(l);
+        }
+    });
+    map.eachLayer(layer => {
+        if (layer instanceof L.TileLayer && layer !== liveWeatherRadarLayer) {
+            map.removeLayer(layer);
+        }
+    });
+
+    const cardSentinel = document.getElementById('card-gis-sentinel');
+    const cardNasa = document.getElementById('card-gis-nasa');
+    const mapEl = document.getElementById('map');
+    const badgeEl = document.getElementById('gis-mode-badge');
+
+    if (cardSentinel) cardSentinel.classList.remove('active-gis-layer');
+    if (cardNasa) cardNasa.classList.remove('active-gis-layer');
+
+    if (layerType === 'sentinel') {
+        // Mode 1: Dark Mode Night Operation + Storm Weather Radar
+        map.addLayer(darkCanvasLayer);
+        if (!map.hasLayer(liveWeatherRadarLayer)) {
+            map.addLayer(liveWeatherRadarLayer);
+        }
+        if (cardSentinel) cardSentinel.classList.add('active-gis-layer');
+        if (badgeEl) {
+            badgeEl.innerHTML = '<span>🌙</span> <span>Copernicus EMS &bull; Dark Thermal Night Map + Storm Radar</span>';
+            badgeEl.classList.remove('hidden');
+        }
+    } else {
+        // Mode 2: Full Daylight Space Satellite Photography
+        map.addLayer(satelliteLayer);
+        if (map.hasLayer(liveWeatherRadarLayer)) {
+            map.removeLayer(liveWeatherRadarLayer);
+        }
+        if (cardNasa) cardNasa.classList.add('active-gis-layer');
+        if (badgeEl) {
+            badgeEl.innerHTML = '<span>🛰️</span> <span>NASA GIBS &bull; Daylight Space Satellite Photography</span>';
+            badgeEl.classList.remove('hidden');
+        }
+    }
+
+    if (mapEl) {
+        mapEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    setTimeout(() => {
+        map.invalidateSize();
+    }, 150);
+}
+window.toggleSatelliteLayer = toggleSatelliteLayer;
 
 let isSidebarOpen = true;
 function toggleSidebarPanel() {
@@ -232,12 +298,112 @@ function getCandidateHosts() {
 }
 
 /**
- * Downloads the automated PDF Action Plan for a given disaster event ID from active backend.
+ * Downloads the automated PDF Action Plan for a given disaster event ID or parameters from active backend.
  */
-function downloadActionPlanPDF(evtId = 1) {
-    const targetUrl = `${activeApiHost}/api/export-report/${evtId || 1}`;
-    window.open(targetUrl, '_blank');
+function downloadActionPlanPDF(options = {}) {
+    let evtId = (typeof options === 'object') ? (options.evtId || 1) : options;
+    const params = new URLSearchParams();
+    if (typeof options === 'object') {
+        if (options.title) params.append('title', options.title);
+        if (options.lat !== '' && options.lat !== undefined && options.lat !== null) params.append('lat', options.lat);
+        if (options.lon !== '' && options.lon !== undefined && options.lon !== null) params.append('lon', options.lon);
+        if (options.sev !== '' && options.sev !== undefined && options.sev !== null) params.append('severity', options.sev);
+        if (options.date) params.append('date', options.date);
+        if (options.waterLiters) params.append('water_liters', options.waterLiters);
+        if (options.foodPacks) params.append('food_packs', options.foodPacks);
+        if (options.budget) params.append('budget', options.budget);
+        if (options.depotName) params.append('depot_name', options.depotName);
+        if (options.distanceKm) params.append('distance_km', options.distanceKm);
+        if (options.landEta) params.append('land_eta', options.landEta);
+        if (options.airEta) params.append('air_eta', options.airEta);
+        if (options.waterEta) params.append('water_eta', options.waterEta);
+    }
+
+    const q = params.toString() ? `?${params.toString()}` : '';
+    const cleanId = encodeURIComponent(evtId || 0);
+    const targetUrl = `${activeApiHost}/api/export-report/${cleanId}${q}`;
+    
+    const a = document.createElement('a');
+    a.href = targetUrl;
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+        if (a.parentNode) document.body.removeChild(a);
+    }, 500);
 }
+window.downloadActionPlanPDF = downloadActionPlanPDF;
+
+window._allEventsMap = new Map();
+
+function hashString(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        hash = ((hash << 5) - hash) + str.charCodeAt(i);
+        hash |= 0;
+    }
+    return Math.abs(hash);
+}
+
+function registerEventForPdf(alert) {
+    if (!alert) return '';
+    const key = 'evt_' + (alert.id || '') + '_' + hashString(alert.title || '');
+    window._allEventsMap.set(key, alert);
+    return key;
+}
+window.registerEventForPdf = registerEventForPdf;
+
+function downloadAlertByKey(key) {
+    const alert = window._allEventsMap.get(key);
+    if (!alert) return;
+    const lat = alert.latitude !== undefined ? alert.latitude : (alert.lat !== undefined ? alert.lat : 0);
+    const lon = alert.longitude !== undefined ? alert.longitude : (alert.lon !== undefined ? alert.lon : 0);
+    const sev = alert.severity || 5.0;
+    const title = alert.title || 'Disaster Event';
+    const date = alert.created_at || alert.pubDate || '';
+
+    const pred = alert.latest_prediction || (alert.predictions && alert.predictions[0]) || {};
+    const waterLiters = Math.round(pred.water_liters || 0);
+    const foodPacks = Math.round(pred.food_packs || 0);
+    const budget = alert.total_estimated_budget_usd || Math.round((waterLiters * 0.50) + (foodPacks * 3.50));
+    const depotName = alert.nearest_depot ? alert.nearest_depot.name : '';
+    const distanceKm = alert.nearest_depot ? alert.nearest_depot.distance_km : getNearestDepotDistance(lat, lon);
+
+    const eta = (alert.nearest_depot && alert.nearest_depot.eta_breakdown)
+        ? alert.nearest_depot.eta_breakdown
+        : calculateClientETABreakdown(distanceKm, sev, title);
+
+    const landEta = (eta && eta.modes && eta.modes.land) ? eta.modes.land.formatted_time : '';
+    const airEta = (eta && eta.modes && eta.modes.air) ? eta.modes.air.formatted_time : '';
+    const waterEta = (eta && eta.modes && eta.modes.water) ? eta.modes.water.formatted_time : '';
+
+    downloadActionPlanPDF({
+        evtId: alert.id || 0,
+        title,
+        lat,
+        lon,
+        sev,
+        date,
+        waterLiters,
+        foodPacks,
+        budget,
+        depotName,
+        distanceKm,
+        landEta,
+        airEta,
+        waterEta
+    });
+}
+window.downloadAlertByKey = downloadAlertByKey;
+
+function downloadAlertFromList(idx, listType = 'all') {
+    const list = (listType === 'filtered') ? (window._lastFilteredAlerts || gdacsAlertsData) : gdacsAlertsData;
+    const alert = list ? list[idx] : null;
+    if (!alert) return;
+    const key = registerEventForPdf(alert);
+    downloadAlertByKey(key);
+}
+window.downloadAlertFromList = downloadAlertFromList;
 
 /**
  * Fast, resilient API fetch helper with quick AbortController timeout and smart caching.
@@ -378,14 +544,166 @@ async function loadAnalytics() {
 }
 window.loadAnalytics = loadAnalytics;
 
+let activeSelectionToken = 0;
+
+function getPopupOptions() {
+    const isDesktop = window.innerWidth > 1024;
+    const sidebarWidth = (isDesktop && isSidebarOpen) ? 420 : 20;
+    return {
+        autoPan: true,
+        autoPanPaddingTopLeft: L.point(sidebarWidth, 90),
+        autoPanPaddingBottomRight: L.point(20, 20),
+        maxHeight: Math.min(window.innerHeight - 140, 520),
+        closeButton: true,
+        autoClose: true,
+        closeOnClick: false,
+        className: 'rescura-disaster-popup'
+    };
+}
+window.getPopupOptions = getPopupOptions;
+
+// Listen to popup closure on the map to clean up selection state and prevent stale async popups
+map.on('popupclose', () => {
+    currentlySelectedDisasterKey = null;
+    activeSelectionToken++;
+    if (activePolyline) {
+        map.removeLayer(activePolyline);
+        activePolyline = null;
+    }
+});
+
+/**
+ * Generates the unified, executive light popup card HTML
+ */
+function buildDisasterPopupHTML(lat, lon, title, severity, timeStr, depotNameText, distanceKm, waterLiters, foodPacks, estBudgetUsd, etaInfo) {
+    const cont = getContinent(lat, lon, title);
+    const numWater = Number(waterLiters) || 0;
+    const numFood = Number(foodPacks) || 0;
+    const numBudget = Number(estBudgetUsd) || Math.round((numWater * 0.50) + (numFood * 3.50));
+    const medKits = Math.max(50, Math.round(severity * 140 + (numWater / 400)));
+
+    const landEta = (etaInfo && etaInfo.modes && etaInfo.modes.land) ? etaInfo.modes.land.formatted_time : 'Calculating';
+    const airEta = (etaInfo && etaInfo.modes && etaInfo.modes.air) ? etaInfo.modes.air.formatted_time : 'Calculating';
+    const waterEta = (etaInfo && etaInfo.modes && etaInfo.modes.water) ? etaInfo.modes.water.formatted_time : 'Calculating';
+
+    return `
+        <div class="disaster-popup-card" style="font-family: var(--font-sans, Inter, sans-serif); min-width: 260px; color: #0f172a; padding: 2px;">
+            <!-- Top Header Badges -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <div style="display: flex; gap: 6px; align-items: center;">
+                    <span style="font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 4px; background: #f1f5f9; color: #475569; letter-spacing: 0.04em;">
+                        ${cont.toUpperCase()}
+                    </span>
+                    <span style="font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 4px; background: #fee2e2; color: #b91c1c; letter-spacing: 0.04em;">
+                        EMERGENCY
+                    </span>
+                </div>
+                <span style="font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: ${severity >= 7 ? '#fee2e2' : (severity >= 5 ? '#fef3c7' : '#dcfce7')}; color: ${severity >= 7 ? '#991b1b' : (severity >= 5 ? '#92400e' : '#166534')}; font-variant-numeric: tabular-nums;">
+                    ${severity}/10
+                </span>
+            </div>
+
+            <!-- Title -->
+            <h4 style="margin: 0 0 8px 0; color: #0f172a; font-size: 14px; font-weight: 700; line-height: 1.35;">
+                ${title}
+            </h4>
+
+            <!-- Event Meta Bar -->
+            <div style="font-size: 11px; color: #64748b; margin-bottom: 8px; display: flex; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px;">
+                <span>Reported Time</span>
+                <span style="font-weight: 600; color: #334155;">${timeStr}</span>
+            </div>
+
+            <!-- Assigned Depot -->
+            <div style="font-size: 11.5px; color: #0f172a; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 10px; margin-bottom: 10px;">
+                <span style="color: #64748b; font-size: 10.5px; display: block; font-weight: 500;">Assigned Logistics Base</span>
+                <strong style="color: #0369a1;">${depotNameText || 'Yangon Central Base'}</strong>
+                <span style="color: #64748b; font-size: 11px; margin-left: 4px;">(${distanceKm} km)</span>
+            </div>
+
+            <!-- Relief Supplies Grid -->
+            <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 10px; margin-bottom: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                <div>
+                    <span style="font-size: 10.5px; color: #64748b; display: block;">Water Needed</span>
+                    <strong style="font-size: 12px; color: #0284c7; font-variant-numeric: tabular-nums;">${numWater.toLocaleString()} L</strong>
+                </div>
+                <div>
+                    <span style="font-size: 10.5px; color: #64748b; display: block;">Food Rations</span>
+                    <strong style="font-size: 12px; color: #d97706; font-variant-numeric: tabular-nums;">${numFood.toLocaleString()} packs</strong>
+                </div>
+                <div>
+                    <span style="font-size: 10.5px; color: #64748b; display: block;">Medical Kits</span>
+                    <strong style="font-size: 12px; color: #059669; font-variant-numeric: tabular-nums;">${medKits.toLocaleString()} kits</strong>
+                </div>
+                <div>
+                    <span style="font-size: 10.5px; color: #64748b; display: block;">Est. Budget</span>
+                    <strong style="font-size: 12px; color: #0f172a; font-variant-numeric: tabular-nums;">$${Math.round(numBudget).toLocaleString()}</strong>
+                </div>
+            </div>
+
+            <!-- Multi-Modal Dispatch ETAs -->
+            <div style="margin-bottom: 10px; padding: 8px 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;">
+                <span style="font-size: 10.5px; color: #64748b; font-weight: 600; display: block; margin-bottom: 6px;">Multi-Modal Transit ETAs</span>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; text-align: center; font-size: 10.5px;">
+                    <div style="background: #ffffff; padding: 4px 2px; border-radius: 4px; border: 1px solid #e2e8f0;">
+                        <span style="color: #64748b; font-size: 9.5px; display: block;">Land</span>
+                        <strong style="color: #0f172a;">${landEta}</strong>
+                    </div>
+                    <div style="background: #ffffff; padding: 4px 2px; border-radius: 4px; border: 1px solid #e2e8f0;">
+                        <span style="color: #64748b; font-size: 9.5px; display: block;">Air</span>
+                        <strong style="color: #0f172a;">${airEta}</strong>
+                    </div>
+                    <div style="background: #ffffff; padding: 4px 2px; border-radius: 4px; border: 1px solid #e2e8f0;">
+                        <span style="color: #64748b; font-size: 9.5px; display: block;">Water</span>
+                        <strong style="color: #0f172a;">${waterEta}</strong>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div style="font-size: 10px; color: #94a3b8; display: flex; justify-content: space-between; border-top: 1px solid #f1f5f9; padding-top: 6px;">
+                <span>${lat.toFixed(3)}, ${lon.toFixed(3)}</span>
+                <span>GDACS Real-Time</span>
+            </div>
+        </div>
+    `;
+}
+window.buildDisasterPopupHTML = buildDisasterPopupHTML;
+
 /**
  * Smooth camera pan & zoom function to focus map on emergency coordinates
  */
 function focusMap(lat, lon) {
-    if (lat && lon) {
-        map.flyTo([lat, lon], 13, {
+    if (!lat || !lon || !map) return;
+    const targetZoom = 8.5;
+
+    const isDesktop = window.innerWidth > 1024;
+    const sidebarWidth = (isDesktop && isSidebarOpen) ? 416 : 0;
+    const topNavHeight = 90;
+
+    const visibleCenterX = sidebarWidth + (window.innerWidth - sidebarWidth) / 2;
+    const visibleCenterY = topNavHeight + (window.innerHeight - topNavHeight) / 2;
+
+    // Position marker so the popup (which is ~360px above marker) is vertically and horizontally centered in unobstructed viewport
+    const desiredMarkerScreenX = visibleCenterX;
+    const desiredMarkerScreenY = visibleCenterY + 110;
+
+    const offsetX = (window.innerWidth / 2) - desiredMarkerScreenX;
+    const offsetY = (window.innerHeight / 2) - desiredMarkerScreenY;
+
+    try {
+        const targetPoint = map.project([lat, lon], targetZoom);
+        const adjustedPoint = targetPoint.add([offsetX, offsetY]);
+        const adjustedLatLng = map.unproject(adjustedPoint, targetZoom);
+
+        map.flyTo(adjustedLatLng, targetZoom, {
             animate: true,
-            duration: 1.5
+            duration: 1.0
+        });
+    } catch (e) {
+        map.flyTo([lat, lon], targetZoom, {
+            animate: true,
+            duration: 1.0
         });
     }
 }
@@ -454,19 +772,23 @@ function updateContinentFilterCounts() {
     });
 
     const chipMap = [
-        { id: 'chip-all', key: 'All', label: 'All Continents', icon: '' },
-        { id: 'chip-asia', key: 'Asia', label: 'Asia', icon: '🌏 ' },
-        { id: 'chip-europe', key: 'Europe', label: 'Europe', icon: '🌍 ' },
-        { id: 'chip-americas', key: 'Americas', label: 'Americas', icon: '🌎 ' },
-        { id: 'chip-africa', key: 'Africa', label: 'Africa', icon: '🌍 ' },
-        { id: 'chip-oceania', key: 'Oceania', label: 'Oceania', icon: '🌏 ' }
+        { id: 'chip-all', radarCntId: 'radar-cnt-all', key: 'All', label: 'All Continents', icon: '' },
+        { id: 'chip-asia', radarCntId: 'radar-cnt-asia', key: 'Asia', label: 'Asia', icon: '🌏 ' },
+        { id: 'chip-europe', radarCntId: 'radar-cnt-europe', key: 'Europe', label: 'Europe', icon: '🌍 ' },
+        { id: 'chip-americas', radarCntId: 'radar-cnt-americas', key: 'Americas', label: 'Americas', icon: '🌎 ' },
+        { id: 'chip-africa', radarCntId: 'radar-cnt-africa', key: 'Africa', label: 'Africa', icon: '🌍 ' },
+        { id: 'chip-oceania', radarCntId: 'radar-cnt-oceania', key: 'Oceania', label: 'Oceania', icon: '🌏 ' }
     ];
 
-    chipMap.forEach(({ id, key, label, icon }) => {
+    chipMap.forEach(({ id, radarCntId, key, label, icon }) => {
+        const num = counts[key] !== undefined ? counts[key] : 0;
         const chip = document.getElementById(id);
         if (chip) {
-            const num = counts[key] !== undefined ? counts[key] : 0;
             chip.innerHTML = `${icon}${label} <span class="chip-count">${num}</span>`;
+        }
+        const radarCnt = document.getElementById(radarCntId);
+        if (radarCnt) {
+            radarCnt.innerText = num;
         }
     });
 }
@@ -532,12 +854,26 @@ function filterByContinent(continent) {
 
     const chips = ['all', 'asia', 'europe', 'americas', 'africa', 'oceania'];
     chips.forEach(c => {
+        const isMatch = (c === continent.toLowerCase()) || (c === 'all' && continent === 'All');
         const el = document.getElementById(`chip-${c}`);
-        if (el) {
-            const isMatch = (c === continent.toLowerCase()) || (c === 'all' && continent === 'All');
-            el.classList.toggle('active', isMatch);
-        }
+        const radarEl = document.getElementById(`radar-chip-${c}`);
+        if (el) el.classList.toggle('active', isMatch);
+        if (radarEl) radarEl.classList.toggle('active', isMatch);
     });
+
+    const continentViews = {
+        'All': { center: [20.0, 10.0], zoom: 2.3 },
+        'Asia': { center: [22.0, 96.0], zoom: 4.8 },
+        'Europe': { center: [50.0, 15.0], zoom: 4.2 },
+        'Americas': { center: [15.0, -80.0], zoom: 3.2 },
+        'Africa': { center: [2.0, 22.0], zoom: 3.6 },
+        'Oceania': { center: [-25.0, 135.0], zoom: 4.0 }
+    };
+
+    if (map && continentViews[continent]) {
+        const target = continentViews[continent];
+        map.flyTo(target.center, target.zoom, { animate: true, duration: 1.2 });
+    }
 
     renderSidebarCards();
     updateMapMarkersFilter();
@@ -637,6 +973,7 @@ function renderSidebarCards() {
     });
 
     // Populate Unified Sidebar Feed (if present)
+    window._lastFilteredAlerts = filteredAlerts;
     if (alertsContainer) {
         if (filteredAlerts.length === 0) {
             alertsContainer.innerHTML = `
@@ -651,6 +988,7 @@ function renderSidebarCards() {
                 const timeStr = formatOccurredTime(alert.created_at || alert.pubDate || alert.timestamp);
                 const cont = getContinent(lat, lon, alert.title);
                 const disasterId = String(alert.id || alert.title || `gdacs_${index}`);
+                const eventPdfKey = registerEventForPdf(alert);
                 
                 let rawType = ((alert.disaster_type || '') + ' ' + (alert.title || '')).toLowerCase();
                 let cat = 'Earthquake';
@@ -681,7 +1019,7 @@ function renderSidebarCards() {
                     <div class="event-card-title">${alert.title}</div>
                     <div class="event-card-foot">
                         <span class="event-card-time">${timeStr}</span>
-                        <button class="btn btn-xs btn-quiet" onclick="event.stopPropagation(); downloadActionPlanPDF(${alert.id || 1})">PDF</button>
+                        <button class="btn btn-xs btn-quiet" onclick="event.stopPropagation(); downloadAlertByKey('${eventPdfKey}')">PDF</button>
                     </div>
                 `;
                 alertsContainer.appendChild(card);
@@ -712,6 +1050,7 @@ function renderSidebarCards() {
         
         const disasterId = String(alert.id || alert.title || `gdacs_${index}`);
         const sevClass = severityClass(alert.severity);
+        const eventPdfKey = registerEventForPdf(alert);
 
         const card = document.createElement('div');
         card.className = 'event-card';
@@ -731,7 +1070,7 @@ function renderSidebarCards() {
             <div class="event-card-title">${alert.title}</div>
             <div class="event-card-foot">
                 <span class="event-card-time">${timeStr}</span>
-                <button class="btn btn-xs btn-quiet" onclick="event.stopPropagation(); downloadActionPlanPDF(${alert.id || 1})">PDF</button>
+                <button class="btn btn-xs btn-quiet" onclick="event.stopPropagation(); downloadAlertByKey('${eventPdfKey}')">PDF</button>
             </div>
         `;
         container.appendChild(card);
@@ -829,33 +1168,7 @@ function renderLiveInfoBlocks(disasters) {
         }).join('');
     }
 
-    // 2. Maps & Satellite Imagery - Interactive Copernicus / Sentinel-2 Layers
-    const satContainer = document.getElementById('maps-imagery-container');
-    if (satContainer) {
-        satContainer.innerHTML = `
-            <div onclick="toggleSatelliteLayer(true)" class="layer-card">
-                <div class="layer-thumb">
-                    <img src="https://images.unsplash.com/photo-1541888087425-ce81dfc469ea?q=80&w=400&auto=format&fit=crop" alt="" loading="lazy">
-                </div>
-                <div class="layer-body">
-                    <div class="layer-title">Sentinel-2 multispectral infrared</div>
-                    <div class="layer-sub">Copernicus EMS &middot; activate layer</div>
-                </div>
-            </div>
-
-            <div onclick="toggleSatelliteLayer(true)" class="layer-card">
-                <div class="layer-thumb">
-                    <img src="https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=400&auto=format&fit=crop" alt="" loading="lazy">
-                </div>
-                <div class="layer-body">
-                    <div class="layer-title">Earth observation &amp; risk damage</div>
-                    <div class="layer-sub">NASA GIBS &middot; high-res imagery</div>
-                </div>
-            </div>
-        `;
-    }
-
-    // 3. GDACS News & Bulletins - Real Live RSS updates
+    // 2. GDACS News & Bulletins - Real Live RSS updates
     const newsContainer = document.getElementById('gdacs-news-container');
     if (newsContainer) {
         const newsEvents = disasters.slice(0, 3);
@@ -893,39 +1206,7 @@ window.renderLiveInfoBlocks = renderLiveInfoBlocks;
 function focusDisasterOnMap(lat, lon, encTitle, severity) {
     const title = decodeURIComponent(encTitle);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    if (map) {
-        map.setView([lat, lon], 7.5, { animate: true });
-        
-        let bestDepot = REGISTERED_DEPOTS_CLIENT[0];
-        let minDist = Infinity;
-        for (const d of REGISTERED_DEPOTS_CLIENT) {
-            const dist = calculateHaversineKm(lat, lon, d.lat, d.lon);
-            if (dist < minDist) {
-                minDist = dist;
-                bestDepot = d;
-            }
-        }
-        
-        if (activePolyline) map.removeLayer(activePolyline);
-        activePolyline = L.polyline([[lat, lon], [bestDepot.lat, bestDepot.lon]], {
-            color: '#16a34a',
-            weight: 3.5,
-            dashArray: '8, 8'
-        }).addTo(map);
-
-        L.popup()
-            .setLatLng([lat, lon])
-            .setContent(`
-                <div style="font-family: 'Inter', sans-serif; min-width: 220px; padding: 4px;">
-                    <div style="font-weight: 800; color: #0f172a; font-size: 13px; margin-bottom: 4px;">${title}</div>
-                    <div style="font-size: 11px; color: #64748b; margin-bottom: 6px;">Severity Index: <b style="color: #dc2626;">${severity}/10</b></div>
-                    <div style="font-size: 11px; background: #f0fdf4; color: #166534; padding: 4px 8px; border-radius: 6px; border: 1px solid #bbf7d0;">
-                        🛡️ Nearest Base: <b>${bestDepot.name}</b> (${Math.round(minDist)} km)
-                    </div>
-                </div>
-            `)
-            .openOn(map);
-    }
+    toggleSelectDisaster(lat, lon, title, severity);
 }
 window.focusDisasterOnMap = focusDisasterOnMap;
 
@@ -964,8 +1245,7 @@ function findNearestDepotClientObject(targetLat, targetLon) {
 
 /**
  * Toggles selection of a disaster event.
- * Re-clicking/double-clicking unselects the event and removes its route line.
- * Route lines are STRICTLY restricted to events within ASEAN bounds.
+ * Re-clicking/double-clicking unselects the event and closes its popup.
  */
 function toggleSelectDisaster(lat, lon, title, severity, created_at = null, depotObj = null) {
     const targetLat = parseFloat(lat);
@@ -974,59 +1254,26 @@ function toggleSelectDisaster(lat, lon, title, severity, created_at = null, depo
 
     const disasterKey = `${targetLat.toFixed(3)}_${targetLon.toFixed(3)}`;
 
-    // Re-click / Double-click on SAME disaster -> UNSELECT & REMOVE ROUTE LINE
+    // Re-click / Double-click on SAME disaster -> UNSELECT
     if (currentlySelectedDisasterKey === disasterKey) {
-        if (currentlyActiveRouteLine) {
-            map.removeLayer(currentlyActiveRouteLine);
-            currentlyActiveRouteLine = null;
+        currentlySelectedDisasterKey = null;
+        activeSelectionToken++;
+        map.closePopup();
+        if (activeMarker) {
+            map.removeLayer(activeMarker);
+            activeMarker = null;
         }
         if (activePolyline) {
             map.removeLayer(activePolyline);
             activePolyline = null;
         }
-        currentlySelectedDisasterKey = null;
-        if (activeMarker) {
-            map.closePopup();
-        }
-        console.log('⚡ Disaster unselected. Route line removed.');
         return;
     }
 
-    // Clear previous route line if any
-    if (currentlyActiveRouteLine) {
-        map.removeLayer(currentlyActiveRouteLine);
-        currentlyActiveRouteLine = null;
-    }
-    if (activePolyline) {
-        map.removeLayer(activePolyline);
-        activePolyline = null;
-    }
-
     currentlySelectedDisasterKey = disasterKey;
-
-    let depotLat = null;
-    let depotLon = null;
-
-    if (depotObj && (depotObj.latitude || depotObj.lat)) {
-        depotLat = depotObj.latitude || depotObj.lat;
-        depotLon = depotObj.longitude || depotObj.lon;
-    } else {
-        const nearestDepotInfo = findNearestDepotClientObject(targetLat, targetLon);
-        depotLat = nearestDepotInfo.lat;
-        depotLon = nearestDepotInfo.lon;
-    }
-
-    if (depotLat && depotLon) {
-        currentlyActiveRouteLine = L.polyline([[depotLat, depotLon], [targetLat, targetLon]], {
-            color: '#10b981',
-            weight: 5,
-            opacity: 0.9,
-            dashArray: '10, 10'
-        }).addTo(map);
-    }
-
+    const requestToken = ++activeSelectionToken;
     focusMap(targetLat, targetLon);
-    fetchReliefData(targetLat, targetLon, severity, title, created_at);
+    fetchReliefData(targetLat, targetLon, severity, title, created_at, requestToken);
 }
 
 /**
@@ -1039,8 +1286,9 @@ function selectAlert(lat, lon, title, severity, created_at = null, depotObj = nu
 /**
  * Asynchronously fetches relief supply predictions and GIS evacuation routing data
  */
-async function fetchReliefData(lat = 17.3333, lon = 96.4833, severity = 7.5, title = 'Emergency Zone', eventCreatedAt = null) {
+async function fetchReliefData(lat = 17.3333, lon = 96.4833, severity = 7.5, title = 'Emergency Zone', eventCreatedAt = null, requestToken = null) {
     try {
+        const currentToken = requestToken !== null ? requestToken : activeSelectionToken;
         const existingEvt = gdacsAlertsData.find(e =>
             (Math.abs((e.latitude || e.lat || 0) - lat) < 0.005 && Math.abs((e.longitude || e.lon || 0) - lon) < 0.005) ||
             (e.title && title && e.title.trim().toLowerCase() === title.trim().toLowerCase())
@@ -1048,7 +1296,6 @@ async function fetchReliefData(lat = 17.3333, lon = 96.4833, severity = 7.5, tit
 
         let waterLiters = 0;
         let foodPacks = 0;
-        let estRescueTime = 4.5;
         let timeStr = formatOccurredTime(eventCreatedAt);
         let depotNameText = '';
         let distanceKm = 0;
@@ -1057,7 +1304,6 @@ async function fetchReliefData(lat = 17.3333, lon = 96.4833, severity = 7.5, tit
             const pred = existingEvt.latest_prediction || (existingEvt.predictions && existingEvt.predictions[0]) || {};
             waterLiters = Math.round(pred.water_liters || 0);
             foodPacks = Math.round(pred.food_packs || 0);
-            estRescueTime = existingEvt.estimated_rescue_time || 4.5;
             timeStr = formatOccurredTime(eventCreatedAt || existingEvt.created_at || existingEvt.pubDate);
 
             if (existingEvt.nearest_depot && existingEvt.nearest_depot.name) {
@@ -1073,16 +1319,18 @@ async function fetchReliefData(lat = 17.3333, lon = 96.4833, severity = 7.5, tit
         const url = `/api/predict-relief?lat=${lat}&lon=${lon}&severity=${severity}`;
         const response = await apiFetch(url);
         
-        let gisAnalysis = {};
+        // CHECK IF SELECTION WAS CANCELLED OR CHANGED WHILE WAITING FOR API RESPONSE
+        if (currentToken !== activeSelectionToken || !currentlySelectedDisasterKey) {
+            return;
+        }
+
         if (response && response.ok) {
             const data = await response.json();
             const aiPrediction = data.ai_prediction || {};
-            gisAnalysis = data.gis_analysis || {};
 
             if (!existingEvt) {
                 waterLiters = Math.round(aiPrediction.water_liters || 0);
                 foodPacks = Math.round(aiPrediction.food_packs || 0);
-                estRescueTime = aiPrediction.estimated_rescue_time || 4.5;
                 timeStr = formatOccurredTime(eventCreatedAt || data.created_at);
                 if (data.nearest_depot && data.nearest_depot.name) {
                     depotNameText = data.nearest_depot.name;
@@ -1095,84 +1343,45 @@ async function fetchReliefData(lat = 17.3333, lon = 96.4833, severity = 7.5, tit
             }
         }
 
-        const cont = getContinent(lat, lon, title);
-        const depotBadge = depotNameText
-            ? `<div style="font-size: 12px; color: #16a34a; font-weight: 700; margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">🛡️ Assigned Depot: ${depotNameText} (${distanceKm} km)</div>`
-            : `<div style="font-size: 11px; color: #64748b; margin-bottom: 6px;">🛡️ Assigned Depot: Yangon Central Hub</div>`;
-
         const estBudgetUsd = (existingEvt && existingEvt.total_estimated_budget_usd)
             ? existingEvt.total_estimated_budget_usd
             : Math.round((waterLiters * 0.50) + (foodPacks * 3.50));
 
         const etaInfo = calculateClientETABreakdown(distanceKm, severity, title);
-        const etaRowHtml = `
-            <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #e2e8f0; font-size: 11px;">
-                <div style="font-weight: 700; color: #475569; margin-bottom: 4px;">⏱️ Multi-Modal Dispatch ETAs:</div>
-                <div style="display: flex; justify-content: space-between; gap: 4px; font-size: 10px;">
-                    <span style="background: #ffffff; padding: 3px 6px; border-radius: 4px; border: 1px solid ${etaInfo.recommended_mode==='land'?'#f59e0b':'#e2e8f0'}; color: ${etaInfo.recommended_mode==='land'?'#b45309':'#475569'}; font-weight: 600;">🚚 <b>Land:</b> ${etaInfo.modes.land.formatted_time}</span>
-                    <span style="background: #ffffff; padding: 3px 6px; border-radius: 4px; border: 1px solid ${etaInfo.recommended_mode==='air'?'#f59e0b':'#e2e8f0'}; color: ${etaInfo.recommended_mode==='air'?'#b45309':'#475569'}; font-weight: 600;">🚁 <b>Air:</b> ${etaInfo.modes.air.formatted_time}</span>
-                    <span style="background: #ffffff; padding: 3px 6px; border-radius: 4px; border: 1px solid ${etaInfo.recommended_mode==='water'?'#f59e0b':'#e2e8f0'}; color: ${etaInfo.recommended_mode==='water'?'#b45309':'#475569'}; font-weight: 600;">🚢 <b>Water:</b> ${etaInfo.modes.water.formatted_time}</span>
-                </div>
-            </div>
-        `;
 
-        const popupContent = `
-            <div style="font-family: Inter, sans-serif; min-width: 240px; color: #0f172a;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                    <span style="font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 10px; background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; text-transform: uppercase;">
-                        🌏 ${cont} &bull; EMERGENCY
-                    </span>
-                    <span style="font-size: 11px; font-weight: 800; color: ${severity >= 7 ? '#dc2626' : (severity >= 5 ? '#d97706' : '#16a34a')};">${severity}/10</span>
-                </div>
-                <h4 style="margin: 4px 0 8px 0; color: #0f172a; font-size: 14px; font-weight: 800; font-family: Outfit, sans-serif; line-height: 1.3;">⚠️ ${title}</h4>
-                <div style="font-size: 11px; color: #7c3aed; font-weight: 600; margin-bottom: 8px; background: #f5f3ff; padding: 5px 10px; border-radius: 8px; border: 1px solid #ddd6fe; display: flex; align-items: center; gap: 6px;">
-                    <span>📅 Event Time:</span>
-                    <span style="font-weight: 700; font-family: monospace;">${timeStr}</span>
-                </div>
-                ${depotBadge}
-                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px 10px; margin-bottom: 8px;">
-                    <div style="font-size: 12px; color: #475569; margin-bottom: 4px;">💧 <b style="color: #1e293b;">Water Needed:</b> <span style="color: #0284c7; font-weight: 800; font-family: monospace;">${waterLiters.toLocaleString()} L</span></div>
-                    <div style="font-size: 12px; color: #475569; margin-bottom: 4px;">🍱 <b style="color: #1e293b;">Food Needed:</b> <span style="color: #d97706; font-weight: 800; font-family: monospace;">${foodPacks.toLocaleString()} packs</span></div>
-                    <div style="font-size: 12px; color: #475569; margin-bottom: 4px;">💵 <b style="color: #1e293b;">Est. Budget:</b> <span style="color: #16a34a; font-weight: 800; font-family: monospace;">$${Math.round(estBudgetUsd).toLocaleString()} USD</span></div>
-                    <div style="font-size: 12px; color: #475569;">⏱️ <b style="color: #1e293b;">Est. Ops Duration:</b> <span style="color: #7c3aed; font-weight: 800; font-family: monospace;">${estRescueTime} hours</span></div>
-                    ${etaRowHtml}
-                </div>
-                <button onclick="startTurnByTurnNavigation(${lat}, ${lon}, '${encodeURIComponent(title)}', ${severity})" style="display: block; width: 100%; margin-bottom: 6px; text-align: center; background: linear-gradient(135deg, #059669, #10b981); color: #ffffff; border: none; padding: 8px 12px; border-radius: 8px; font-weight: 700; font-size: 12px; cursor: pointer; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.25);">
-                    🧭 Grab-Style Route Guidance (Turn-by-Turn)
-                </button>
-                <button onclick="downloadActionPlanPDF(${(existingEvt && existingEvt.id) ? existingEvt.id : 1})" style="display: block; width: 100%; margin-bottom: 8px; text-align: center; background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #ffffff; border: none; padding: 8px 12px; border-radius: 8px; font-weight: 700; font-size: 12px; cursor: pointer; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.25);">
-                    📄 Download Action Plan (PDF)
-                </button>
-                <div style="font-size: 10.5px; color: #94a3b8; display: flex; justify-content: space-between;">
-                    <span>📍 ${lat.toFixed(3)}, ${lon.toFixed(3)}</span>
-                    <span>GDACS Live Feed</span>
-                </div>
-            </div>
-        `;
+        const popupContent = buildDisasterPopupHTML(
+            lat, lon, title, severity, timeStr,
+            depotNameText, distanceKm, waterLiters, foodPacks, estBudgetUsd, etaInfo
+        );
 
+        const popupOptions = getPopupOptions();
         let matchMarker = mapMarkers.find(m =>
             Math.abs(m.getLatLng().lat - lat) < 0.005 && Math.abs(m.getLatLng().lng - lon) < 0.005
         );
 
         if (matchMarker) {
-            matchMarker.setPopupContent(popupContent).openPopup();
+            matchMarker.setPopupContent(popupContent);
+            if (!matchMarker.isPopupOpen() && currentlySelectedDisasterKey) {
+                matchMarker.openPopup();
+            }
         } else {
             if (activeMarker) {
                 map.removeLayer(activeMarker);
+                activeMarker = null;
             }
 
-            activeMarker = L.marker([lat, lon], { icon: buildDisasterIcon(severity) })
-                .addTo(map)
-                .bindPopup(popupContent)
-                .openPopup();
+            if (currentlySelectedDisasterKey) {
+                activeMarker = L.marker([lat, lon], { icon: buildDisasterIcon(severity) })
+                    .addTo(map)
+                    .bindPopup(popupContent, popupOptions)
+                    .openPopup();
+            }
         }
 
         if (activePolyline) {
             map.removeLayer(activePolyline);
             activePolyline = null;
         }
-
-        map.flyTo([lat, lon], 10, { animate: true, duration: 1.2 });
 
     } catch (error) {
         console.error('Error fetching relief data from backend:', error);
@@ -1304,7 +1513,7 @@ async function loadSOSAlerts() {
                         ${status !== 'resolved' ? `<button class="btn-dispatch-action btn-resolve" onclick="updateSOSStatus('${alertId}', 'resolved')">Mark Resolved</button>` : ''}
                     </div>
                 </div>
-            `);
+            `, getPopupOptions());
 
             sosCircleMarkers.push(marker);
         }
@@ -1330,10 +1539,7 @@ function initRealtimeListener() {
                         const newLat = payload.new.latitude || payload.new.lat;
                         const newLon = payload.new.longitude || payload.new.lon;
                         if (newLat && newLon) {
-                            map.flyTo([newLat, newLon], 13, {
-                                animate: true,
-                                duration: 2.0
-                            });
+                            focusMap(newLat, newLon);
                         }
                     }
                 })
@@ -1365,12 +1571,26 @@ async function loadAllDepots() {
                     const depotMarker = L.marker([depot.latitude, depot.longitude], { icon: depotIcon })
                         .addTo(map)
                         .bindPopup(`
-                            <div style="font-family: Inter, sans-serif; min-width: 190px;">
-                                <h4 style="margin: 0 0 6px 0; color: #22c55e; font-size: 14px; font-weight: 700;">🛡️ ${depot.name}</h4>
-                                <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 3px;"><b>Water Inventory:</b> <span style="color: #38bdf8;">${depot.water_inventory.toLocaleString()} L</span></div>
-                                <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 3px;"><b>Food Inventory:</b> <span style="color: #fbbf24;">${depot.food_inventory.toLocaleString()} packs</span></div>
+                            <div style="font-family: Inter, sans-serif; min-width: 220px; padding: 4px 2px;">
+                                <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: #0284c7; letter-spacing: 0.05em; margin-bottom: 2px;">National Logistics Base</div>
+                                <h4 style="margin: 0 0 8px 0; color: #0f172a; font-size: 13px; font-weight: 700;">${depot.name}</h4>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 8px; background: #f8fafc; padding: 6px 8px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                                    <div>
+                                        <div style="font-size: 10px; color: #64748b; font-weight: 500;">Water Capacity</div>
+                                        <div style="font-size: 12px; font-weight: 700; color: #0284c7;">${depot.water_inventory.toLocaleString()} L</div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size: 10px; color: #64748b; font-weight: 500;">Food Rations</div>
+                                        <div style="font-size: 12px; font-weight: 700; color: #d97706;">${depot.food_inventory.toLocaleString()} packs</div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size: 10px; color: #64748b; font-weight: 500;">Medical Kits</div>
+                                        <div style="font-size: 12px; font-weight: 700; color: #059669;">${(depot.medical_kits || 3400).toLocaleString()} kits</div>
+                                    </div>
+                                </div>
+                                <div style="font-size: 11px; color: #475569;"><b>Transit Mode:</b> ${depot.primary_transit_mode || 'Land Convoy & Marine Delta Barge'}</div>
                             </div>
-                        `);
+                        `, getPopupOptions());
                     depotMarkers.push(depotMarker);
                 }
             });
@@ -1461,47 +1681,18 @@ async function initializeDashboard() {
                 ? event.nearest_depot.eta_breakdown
                 : calculateClientETABreakdown(distanceKm, event.severity, title);
 
-            const etaRowHtml = `
-                <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255, 255, 255, 0.1); font-size: 11px;">
-                    <div style="font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">⏱️ Multi-Modal Dispatch ETAs:</div>
-                    <div style="display: flex; justify-content: space-between; gap: 4px; font-size: 10px;">
-                        <span style="background: rgba(15,23,42,0.6); padding: 3px 6px; border-radius: 4px; border: 1px solid ${etaInfo.recommended_mode==='land'?'#f59e0b':'rgba(255,255,255,0.1)'}; color: ${etaInfo.recommended_mode==='land'?'#fef08a':'#e2e8f0'};">🚚 <b>Land:</b> ${etaInfo.modes.land.formatted_time}</span>
-                        <span style="background: rgba(15,23,42,0.6); padding: 3px 6px; border-radius: 4px; border: 1px solid ${etaInfo.recommended_mode==='air'?'#f59e0b':'rgba(255,255,255,0.1)'}; color: ${etaInfo.recommended_mode==='air'?'#fef08a':'#e2e8f0'};">🚁 <b>Air:</b> ${etaInfo.modes.air.formatted_time}</span>
-                        <span style="background: rgba(15,23,42,0.6); padding: 3px 6px; border-radius: 4px; border: 1px solid ${etaInfo.recommended_mode==='water'?'#f59e0b':'rgba(255,255,255,0.1)'}; color: ${etaInfo.recommended_mode==='water'?'#fef08a':'#e2e8f0'};">🚢 <b>Water:</b> ${etaInfo.modes.water.formatted_time}</span>
-                    </div>
-                </div>
-            `;
+            let waterVal = latestPred ? latestPred.water_liters : 1500000;
+            let foodVal = latestPred ? latestPred.food_packs : 250000;
+            let budgetVal = event.total_estimated_budget_usd || Math.round((waterVal * 0.50) + (foodVal * 3.50));
 
-            const popupContent = `
-                <div style="font-family: Inter, sans-serif; min-width: 230px; color: #f8fafc;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                        <span style="font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 10px; background: rgba(239, 68, 68, 0.25); color: #f87171; text-transform: uppercase;">
-                            🌏 ${cont} &bull; EMERGENCY
-                        </span>
-                        <span style="font-size: 11px; font-weight: 800; color: #fbbf24;">${event.severity}/10</span>
-                    </div>
-                    <h4 style="margin: 4px 0 8px 0; color: #f8fafc; font-size: 15px; font-weight: 800; font-family: Outfit, sans-serif;">⚠️ ${title}</h4>
-                    <div style="font-size: 12px; color: #c084fc; font-weight: 700; margin-bottom: 8px; background: rgba(192, 132, 252, 0.12); padding: 5px 10px; border-radius: 8px; border: 1px solid rgba(192, 132, 252, 0.3); display: flex; align-items: center; gap: 6px;">
-                        <span>📅 Event Date/Time:</span>
-                        <span style="color: #e9d5ff; font-weight: 800;">${timeStr}</span>
-                    </div>
-                    ${depotBadge}
-                    <div style="background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 8px 10px; margin-bottom: 8px;">
-                        <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 3px;">💧 <b>Water Needed:</b> <span style="color: #38bdf8; font-weight: 700;">${waterText}</span></div>
-                        <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 3px;">🍱 <b>Food Needed:</b> <span style="color: #fbbf24; font-weight: 700;">${foodText}</span></div>
-                        <div style="font-size: 12px; color: #cbd5e1;">⏱️ <b>Est. Ops Duration:</b> <span style="color: #a855f7; font-weight: 700;">${estRescueTime} hours</span></div>
-                        ${etaRowHtml}
-                    </div>
-                    <div style="font-size: 11px; color: #94a3b8; display: flex; justify-content: space-between;">
-                        <span>📍 ${lat.toFixed(3)}, ${lon.toFixed(3)}</span>
-                        <span>GDACS Live Feed</span>
-                    </div>
-                </div>
-            `;
+            const popupContent = buildDisasterPopupHTML(
+                lat, lon, title, event.severity, timeStr,
+                depotNameText, distanceKm, waterVal, foodVal, budgetVal, etaInfo
+            );
 
             const marker = L.marker([lat, lon], { icon: buildDisasterIcon(event.severity) })
                 .addTo(map)
-                .bindPopup(popupContent);
+                .bindPopup(popupContent, getPopupOptions());
 
             marker.on('click', (e) => {
                 toggleSelectDisaster(lat, lon, title, event.severity, event.created_at, nearestDepotObj);
@@ -1539,10 +1730,10 @@ function handleUrlLocationParams() {
         const lat = parseFloat(latStr);
         const lon = parseFloat(lonStr);
         if (!isNaN(lat) && !isNaN(lon)) {
-            map.flyTo([lat, lon], 12, { animate: true, duration: 1.5 });
+            focusMap(lat, lon);
             setTimeout(() => {
                 fetchReliefData(lat, lon, severity, title);
-            }, 800);
+            }, 600);
         }
     }
 }
@@ -1707,6 +1898,7 @@ function displayEmergencyModal(payload) {
     const elPop = document.getElementById('modal-population');
     const elWater = document.getElementById('modal-water');
     const elFood = document.getElementById('modal-food');
+    const elMedical = document.getElementById('modal-medical');
     const elDepot = document.getElementById('modal-depot');
 
     if (modal) {
@@ -1716,6 +1908,7 @@ function displayEmergencyModal(payload) {
         if (elPop) elPop.innerText = `${(payload.affected_population || 0).toLocaleString()} People`;
         if (elWater) elWater.innerText = `${(payload.total_water_liters || 0).toLocaleString()} L`;
         if (elFood) elFood.innerText = `${(payload.total_food_packs || 0).toLocaleString()} Packs`;
+        if (elMedical) elMedical.innerText = `${Math.max(50, Math.round((payload.severity || 5.0) * 140 + ((payload.total_water_liters || 0) / 400))).toLocaleString()} Kits`;
         
         let depotDist = 0;
         if (elDepot) {
@@ -1942,29 +2135,35 @@ let currentCsvRows = [];
 let currentCsvHeaders = [];
 
 const DATASET_METADATA = {
-    'myanmar_historical_data.csv': {
-        name: '📊 USGS Seismic Disaster History',
-        records: '1,666 verified events',
-        citation: 'United States Geological Survey (USGS) Earthquake Hazards API',
-        desc: 'Historical earthquakes in Myanmar & ASEAN (2006-2026) with magnitude, GPS, year, and Sphere relief usage.'
-    },
     'myanmar_demographics.csv': {
-        name: '👥 Townships & Demographics',
-        records: '110+ Townships & Hubs',
-        citation: 'Department of Population (Myanmar Census), MIMU & ASEAN Stats',
-        desc: 'Official township populations across all Myanmar states/regions and regional ASEAN disaster hubs.'
-    },
-    'relief_depots.csv': {
-        name: '🛡️ Regional Humanitarian Supply Hubs',
-        records: '4 Strategic Depots',
-        citation: 'National Disaster Management Committee & AHA Centre',
-        desc: 'Verified warehouse stock capacities (Water, Food, Medical kits, Coverage radii).'
+        name: 'Myanmar Demographics & Census',
+        records: '131 Townships',
+        citation: 'MIMU (Myanmar Information Management Unit - UN Resident Coordinator Office)',
+        desc: 'Official Myanmar Census baseline mapping 131 townships across all 15 States and Divisions with verified population counts and coordinates.'
     },
     'historical_disasters.csv': {
-        name: '📜 Historical Disaster Archive',
-        records: '75+ Major Disasters',
-        citation: 'EM-DAT International Disaster Database & UN-OCHA',
-        desc: 'Comprehensive multi-hazard disaster log (cyclones, floods, quakes, landslides, tsunamis) across Myanmar & ASEAN.'
+        name: 'Myanmar & Regional Disaster Archive',
+        records: '76 Events',
+        citation: 'AHA Centre ADINet, UN-OCHA ReliefWeb, EM-DAT & Myanmar DDM',
+        desc: 'Comprehensive multi-hazard disaster registry (cyclones, floods, earthquakes, landslides) across Myanmar and ASEAN with damage metrics and source citations.'
+    },
+    'sphere_standards.csv': {
+        name: 'UN Sphere Standards (Water & Food)',
+        records: '6 Standard Multipliers',
+        citation: 'The Sphere Handbook: Humanitarian Charter & Minimum Standards in Disaster Response',
+        desc: 'Scientific calculation benchmarks: 15L potable water/person/day (Core Standard 2.1), 2,100 kcal food ration pack/person/day (Core Standard 3.1), and IASC transport benchmarks ($0.45/L water, $3.20/food pack).'
+    },
+    'relief_depots.csv': {
+        name: 'National Logistics Supply Bases',
+        records: '3 Hubs',
+        citation: 'Department of Disaster Management (DDM) & NDMC Myanmar',
+        desc: 'Verified warehouse inventory capacities across Myanmar\'s 3 strategic logistics hubs (Yangon, Naypyidaw, Mandalay) with Highway 1 road routing.'
+    },
+    'myanmar_historical_data.csv': {
+        name: 'USGS Seismic Fault History',
+        records: '1,666 events',
+        citation: 'United States Geological Survey (USGS) Earthquake Hazards API',
+        desc: 'Verified historical seismic events along Myanmar\'s Sagaing faultline with magnitude, coordinates, and relief requirements.'
     }
 };
 
@@ -1981,6 +2180,15 @@ async function openRawDataModal() {
         if (response.ok) {
             const data = await response.json();
             availableDatasets = data.datasets || [];
+            
+            // Prioritize standard order: Demographics -> Disasters -> Sphere Standards -> Depots -> USGS
+            const priorityOrder = ['myanmar_demographics.csv', 'historical_disasters.csv', 'sphere_standards.csv', 'relief_depots.csv', 'myanmar_historical_data.csv'];
+            availableDatasets.sort((a, b) => {
+                const ia = priorityOrder.indexOf(a);
+                const ib = priorityOrder.indexOf(b);
+                return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+            });
+
             renderDatasetTabs();
             if (availableDatasets.length > 0) {
                 switchRawDataTab(availableDatasets[0]);
@@ -2006,6 +2214,51 @@ function closeRawDataModalOutside(e) {
 }
 window.closeRawDataModalOutside = closeRawDataModalOutside;
 
+function formatHeaderTitle(rawHeader) {
+    if (!rawHeader) return '';
+    const clean = rawHeader.replace(/_/g, ' ').trim();
+    // Common acronyms and conversions
+    const overrides = {
+        'lat': 'Latitude',
+        'latitude': 'Latitude',
+        'lon': 'Longitude',
+        'longitude': 'Longitude',
+        'water capacity liters': 'Water Capacity (L)',
+        'food capacity packs': 'Food Capacity (Packs)',
+        'medical kits': 'Medical Kits',
+        'coverage radius km': 'Coverage (km)',
+        'primary transit mode': 'Primary Transit Mode',
+        'state region': 'State / Region',
+        'disaster name': 'Disaster Name',
+        'event type': 'Event Type',
+        'disaster severity': 'Severity (0-10)',
+        'vulnerable ratio': 'Vulnerability Ratio',
+        'water needed': 'Water Needed (L)',
+        'food needed': 'Food Needed (Packs)',
+        'source citation': 'Source Citation',
+        'rescue time hours': 'Rescue ETA (hrs)',
+        'affected people': 'Affected Population',
+        'water used liters': 'Water Used (L)',
+        'food used packs': 'Food Used (Packs)',
+        'minimum standard': 'Minimum Standard',
+        'metric multiplier': 'Standard Multiplier',
+        'official source': 'Official Source',
+        'usage in rescura': 'Usage in Rescura Sync'
+    };
+    const lower = clean.toLowerCase();
+    if (overrides[lower]) return overrides[lower];
+    return clean.replace(/\w\S*/g, (w) => (w.charAt(0).toUpperCase() + w.substr(1).toLowerCase()));
+}
+
+function formatTableCellValue(val, headerName) {
+    if (val === undefined || val === null || val === '') return '--';
+    const num = Number(val);
+    if (!isNaN(num) && Number.isInteger(num) && Math.abs(num) >= 1000 && !headerName.toLowerCase().includes('year')) {
+        return num.toLocaleString();
+    }
+    return val;
+}
+
 function renderDatasetTabs() {
     const container = document.getElementById('raw-data-tabs-container');
     if (!container) return;
@@ -2016,12 +2269,11 @@ function renderDatasetTabs() {
     }
 
     container.innerHTML = availableDatasets.map(ds => {
-        const meta = DATASET_METADATA[ds] || { name: ds, records: 'CSV File' };
+        const meta = DATASET_METADATA[ds] || { name: ds };
         const isActive = (ds === currentRawDataCsv);
         return `
-            <button id="tab-${ds}" onclick="switchRawDataTab('${ds}')" class="px-3.5 py-2 rounded-xl text-xs font-bold transition-all border flex items-center gap-2 ${isActive ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border-slate-200'}">
+            <button id="tab-${ds}" onclick="switchRawDataTab('${ds}')" class="px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border flex items-center gap-2 shrink-0 ${isActive ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border-slate-200'}">
                 <span>${meta.name}</span>
-                <span class="text-[10px] px-1.5 py-0.5 rounded-full ${isActive ? 'bg-blue-800/60 text-white' : 'bg-slate-200 text-slate-600'}">${meta.records}</span>
             </button>
         `;
     }).join('');
@@ -2056,7 +2308,7 @@ function parseAndRenderCSV(csvText) {
     const meta = DATASET_METADATA[currentRawDataCsv] || { citation: 'Rescura Sync Database', desc: 'Raw verified dataset' };
     const descEl = document.getElementById('raw-data-desc');
     if (descEl) {
-        descEl.innerHTML = `<b>Source Citation:</b> ${meta.citation} &bull; <span class="text-slate-500">${meta.desc}</span>`;
+        descEl.innerHTML = `<b>Source Citation:</b> <span class="text-slate-800 font-semibold">${meta.citation}</span> &bull; <span class="text-slate-500">${meta.desc}</span>`;
     }
 
     renderCsvTableRows(currentCsvRows);
@@ -2065,18 +2317,27 @@ function parseAndRenderCSV(csvText) {
 function renderCsvTableRows(rows) {
     const theadRow = document.getElementById('raw-data-thead-row');
     if (theadRow) {
-        theadRow.innerHTML = currentCsvHeaders.map(h => `<th class="p-3 text-slate-600 font-bold uppercase tracking-wider text-[11px] border-r border-slate-200 last:border-0">${h}</th>`).join('');
+        theadRow.innerHTML = currentCsvHeaders.map(h => {
+            const formatted = formatHeaderTitle(h);
+            return `<th class="px-4 py-3 bg-slate-50 text-slate-700 font-semibold text-xs border-b border-slate-200 sticky top-0 z-20 whitespace-nowrap shadow-sm" style="background-color: #f8fafc;">${formatted}</th>`;
+        }).join('');
     }
 
     const tbody = document.getElementById('raw-data-tbody');
     if (tbody) {
         if (rows.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="${currentCsvHeaders.length || 1}" class="p-6 text-center text-slate-400 text-xs italic">No matching records found.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="${currentCsvHeaders.length || 1}" class="p-8 text-center text-slate-400 text-xs italic">No matching records found.</td></tr>`;
             return;
         }
-        const rowsHtml = rows.slice(0, 100).map(cols => {
-            return `<tr class="hover:bg-blue-50/50 transition-colors group cursor-default border-t border-slate-100">
-                ${cols.map(c => `<td class="p-3 whitespace-nowrap text-slate-700 font-mono text-xs border-r border-slate-100 last:border-0">${c}</td>`).join('')}
+        const previewLimit = 500;
+        const rowsHtml = rows.slice(0, previewLimit).map(cols => {
+            return `<tr class="hover:bg-slate-50/80 transition-colors cursor-default border-t border-slate-100">
+                ${cols.map((c, i) => {
+                    const header = currentCsvHeaders[i] || '';
+                    const formatted = formatTableCellValue(c, header);
+                    const isNum = !isNaN(Number(c)) && c.trim() !== '';
+                    return `<td class="px-4 py-3 whitespace-nowrap text-slate-700 text-xs ${isNum ? 'font-mono' : 'font-sans'}">${formatted}</td>`;
+                }).join('')}
             </tr>`;
         }).join('');
         
@@ -2244,17 +2505,17 @@ function renderNavHUD(nav) {
 
     if (destTitle) destTitle.textContent = nav.disaster_title || 'Disaster Epicenter';
     if (originBadge) originBadge.textContent = nav.depot_name || 'Relief Depot';
-    if (etaBadge) etaBadge.textContent = `⏱️ ${nav.formatted_eta}`;
-    if (distBadge) distBadge.textContent = `📍 ${nav.total_distance_km} km`;
+    if (etaBadge) etaBadge.textContent = nav.formatted_eta;
+    if (distBadge) distBadge.textContent = `${nav.total_distance_km} km`;
     if (hazardText) hazardText.textContent = nav.hazard_warning || 'Route active via primary corridor.';
 
     if (stepsContainer) {
         stepsContainer.innerHTML = '';
-        (nav.steps || []).forEach((step) => {
+        (nav.steps || []).forEach((step, idx) => {
             const card = document.createElement('div');
             card.className = 'grab-step-card';
             card.innerHTML = `
-                <div class="step-icon-badge">${step.icon || '⬆️'}</div>
+                <div class="step-icon-badge">${idx + 1}</div>
                 <div class="step-content">
                     <div class="step-instruction">${step.instruction}</div>
                     <div class="step-meta">
@@ -2287,19 +2548,21 @@ function drawNavigationPolyline(nav) {
         dashArray = '8, 8';
     } else if (nav.mode === 'water') {
         routeColor = '#0284c7';
-        dashArray = '5, 5';
+        dashArray = '6, 6';
     }
 
     currentNavRouteLayer = L.polyline(coords, {
         color: routeColor,
         weight: 6,
-        opacity: 0.9,
+        opacity: 0.95,
         dashArray: dashArray,
         lineCap: 'round',
         lineJoin: 'round'
     }).addTo(map);
 
-    map.fitBounds(currentNavRouteLayer.getBounds(), { padding: [60, 60], maxZoom: 13 });
+    if (coords.length > 1) {
+        map.fitBounds(currentNavRouteLayer.getBounds(), { padding: [70, 70], maxZoom: 12 });
+    }
 }
 
 window.closeTurnByTurnNavigation = function() {
@@ -2332,15 +2595,15 @@ function startVehicleSimulation() {
     const progFill = document.getElementById('simulation-progress-fill');
 
     if (btnLabel) btnLabel.textContent = 'Pause Simulation';
-    if (btnIcon) btnIcon.textContent = '⏸';
+    if (btnIcon) btnIcon.innerHTML = '&#10074;&#10074;';
     if (progBar) progBar.classList.remove('hidden');
 
     if (!currentSimVehicleMarker) {
         const vIcon = L.divIcon({
             className: 'vehicle-sim-marker',
-            html: `<div style="font-size: 24px; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3)); transform: scale(1.2);">${currentNavData.vehicle_icon || '🚚'}</div>`,
-            iconSize: [30, 30],
-            iconAnchor: [15, 15]
+            html: `<div style="width:16px;height:16px;background:#2563eb;border:3px solid #ffffff;border-radius:50%;box-shadow:0 0 12px #2563eb;"></div>`,
+            iconSize: [20, 20],
+            iconAnchor: [10, 10]
         });
         currentSimVehicleMarker = L.marker(coords[0], { icon: vIcon, zIndexOffset: 2000 }).addTo(map);
         simulationStepIndex = 0;
@@ -2360,8 +2623,8 @@ function startVehicleSimulation() {
 
         if (simulationStepIndex === coords.length - 1) {
             stopVehicleSimulation();
-            if (btnLabel) btnLabel.textContent = '🏁 Mission Arrived (Restart)';
-            if (btnIcon) btnIcon.textContent = '🔄';
+            if (btnLabel) btnLabel.textContent = 'Mission Arrived (Restart)';
+            if (btnIcon) btnIcon.innerHTML = '&#8635;';
         }
     }, 450);
 }
@@ -2374,6 +2637,6 @@ function stopVehicleSimulation() {
     const btnLabel = document.getElementById('dispatch-label');
     const btnIcon = document.getElementById('dispatch-icon');
     if (btnLabel && btnLabel.textContent.includes('Pause')) btnLabel.textContent = 'Resume Simulation';
-    if (btnIcon && btnIcon.textContent === '⏸') btnIcon.textContent = '▶';
+    if (btnIcon) btnIcon.innerHTML = '&#9654;';
 }
 

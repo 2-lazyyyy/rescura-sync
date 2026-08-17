@@ -103,7 +103,7 @@ def aggregate_sos_demographics(alerts: List[Dict[str, Any]]) -> Dict[str, Any]:
         }
 
     total_affected = sum(alert.get("affected_count", 0) for alert in alerts)
-    need_counts = {}
+    need_counts: dict[str, int] = {}
     for alert in alerts:
         need = alert.get("urgent_need", "General")
         need_counts[need] = need_counts.get(need, 0) + 1

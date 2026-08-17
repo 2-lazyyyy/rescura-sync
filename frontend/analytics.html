@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
     <!-- Global CSS Stylesheet -->
-    <link rel="stylesheet" href="style.css?v=20260818-minimal">
+    <link rel="stylesheet" href="style.css?v=20260818-clean-v5">
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -69,20 +69,13 @@
             <div class="nav-status-badge">
                 <span>Live</span>
             </div>
-            <a href="index.html" class="btn-nav-amber" id="btn-raw-data" title="Inspect database datasets &amp; provenance">
+            <button class="btn-nav-amber" id="btn-raw-data" onclick="openRawDataModal()" title="Inspect database datasets &amp; provenance">
                 <svg class="icon icon-sm" aria-hidden="true"><use href="#i-database"/></svg>
                 <span class="btn-label">Datasets</span>
-            </a>
-            <button class="btn-nav-purple" id="btn-pdf-download" onclick="downloadActionPlanPDF(1)" title="Download action plan PDF">
-                <svg class="icon icon-sm" id="pdf-icon" aria-hidden="true"><use href="#i-file"/></svg>
-                <span class="btn-label">Report</span>
             </button>
-            <button class="btn-nav-teal btn-icon" id="btn-refresh-logistics" onclick="refreshLogistics()" title="Refresh logistics" aria-label="Refresh logistics">
-                <svg class="icon icon-sm" id="refresh-icon" aria-hidden="true"><use href="#i-refresh"/></svg>
-            </button>
-            <button class="btn-nav-blue" id="btn-sync-ai" onclick="syncData()" title="Sync AI data">
-                <svg class="icon icon-sm" id="sync-icon" aria-hidden="true"><use href="#i-zap"/></svg>
-                <span class="btn-label">Sync AI</span>
+            <button class="btn-nav-blue" id="btn-sync-ai" onclick="syncData()" title="Refresh live data">
+                <svg class="icon icon-sm" id="sync-icon" aria-hidden="true"><use href="#i-refresh"/></svg>
+                <span class="btn-label">Refresh Data</span>
             </button>
         </div>
     </nav>
@@ -92,8 +85,8 @@
         <!-- Page header -->
         <div class="page-header" style="display:flex; align-items:flex-end; justify-content:space-between; gap:24px; flex-wrap:wrap;">
             <div class="page-title-group">
-                <h1>Crisis analytics &amp; decision support</h1>
-                <p>Multi-modal logistics optimisation, predictive Sphere demand models, and depot burn-rate forecasting.</p>
+                <h1>Crisis Analytics & Relief Planning</h1>
+                <p>Emergency supply estimates, depot stock levels, and transport times.</p>
             </div>
             <div style="display:flex; align-items:center; gap:8px;">
                 <button onclick="fetchAnalyticsData()" class="btn">
@@ -110,38 +103,37 @@
         <!-- Overview metrics -->
         <div class="metric-row" role="group" aria-label="Analytics summary">
             <div class="metric">
-                <span class="eyebrow">Active crises</span>
+                <span class="eyebrow">Active Crises</span>
                 <span class="metric-value" id="stat-active-events">0</span>
             </div>
             <div class="metric">
-                <span class="eyebrow">Severe (7+)</span>
+                <span class="eyebrow">Critical Alerts</span>
                 <span class="metric-value sev-critical" id="stat-severe-events" style="font-size:24px;">0</span>
             </div>
             <div class="metric">
-                <span class="eyebrow">Est. relief budget</span>
-                <span class="metric-value" id="stat-total-budget">$0</span>
-            </div>
-            <div class="metric">
-                <span class="eyebrow">Model accuracy</span>
-                <span class="metric-value">94.2<span class="metric-unit">% R²</span></span>
-            </div>
-            <div class="metric">
-                <span class="eyebrow">Water allocated</span>
+                <span class="eyebrow">Water Needed</span>
                 <span class="metric-value" id="stat-total-water">0</span>
             </div>
             <div class="metric">
-                <span class="eyebrow">Food allocated</span>
+                <span class="eyebrow">Food Packs Needed</span>
                 <span class="metric-value" id="stat-total-food">0</span>
+            </div>
+            <div class="metric">
+                <span class="eyebrow">Avg. Response Time</span>
+                <span class="metric-value" id="stat-avg-eta">0<span class="metric-unit">hrs</span></span>
+            </div>
+            <div class="metric">
+                <span class="eyebrow">Estimated Relief Budget</span>
+                <span class="metric-value" id="stat-total-budget">$0</span>
             </div>
         </div>
 
-        <!-- Section tabs: an underline marks the current view -->
+        <!-- Section tabs -->
         <div class="tabs" role="tablist">
-            <button onclick="switchAnalyticsTab('tab-telemetry')" id="btn-tab-telemetry" class="analytics-tab-btn tab active" role="tab">Telemetry &amp; trends</button>
-            <button onclick="switchAnalyticsTab('tab-simulator')" id="btn-tab-simulator" class="analytics-tab-btn tab" role="tab">Crisis simulator</button>
-            <button onclick="switchAnalyticsTab('tab-inventory')" id="btn-tab-inventory" class="analytics-tab-btn tab" role="tab">Depot stock</button>
-            <button onclick="switchAnalyticsTab('tab-transport')" id="btn-tab-transport" class="analytics-tab-btn tab" role="tab">Transport</button>
-            <button onclick="switchAnalyticsTab('tab-recommendations')" id="btn-tab-recommendations" class="analytics-tab-btn tab" role="tab">Recommendations</button>
+            <button onclick="switchAnalyticsTab('tab-telemetry')" id="btn-tab-telemetry" class="analytics-tab-btn tab active" role="tab">Overview &amp; Trends</button>
+            <button onclick="switchAnalyticsTab('tab-simulator')" id="btn-tab-simulator" class="analytics-tab-btn tab" role="tab">Crisis Simulator</button>
+            <button onclick="switchAnalyticsTab('tab-inventory')" id="btn-tab-inventory" class="analytics-tab-btn tab" role="tab">Depot Stock</button>
+            <button onclick="switchAnalyticsTab('tab-transport')" id="btn-tab-transport" class="analytics-tab-btn tab" role="tab">Transport Times</button>
         </div>
 
         <!-- ==================== TAB 1: MISSION TELEMETRY & TRENDS ==================== -->
@@ -150,10 +142,10 @@
                 <!-- Resource Allocation Chart -->
                 <section class="card">
                     <header class="card-head">
-                        <h3>Resource allocation by crisis sector</h3>
-                        <span class="card-note">Top 5 &middot; Sphere standard</span>
+                        <h3>Resource allocation by region</h3>
+                        <span class="card-note">Water &amp; Food</span>
                     </header>
-                    <div class="card-body chart-box">
+                    <div class="card-body chart-box chart-box-tall">
                         <canvas id="chart-resource-allocation"></canvas>
                     </div>
                 </section>
@@ -161,73 +153,25 @@
                 <!-- Severity Distribution Chart -->
                 <section class="card">
                     <header class="card-head">
-                        <h3>Disaster severity distribution</h3>
-                        <span class="card-note">Rating 0–10</span>
+                        <h3>Active crises by alert level</h3>
+                        <span class="card-note">Live Severity</span>
                     </header>
-                    <div class="card-body chart-box">
+                    <div class="card-body chart-box chart-box-tall">
                         <canvas id="chart-severity-distribution"></canvas>
                     </div>
                 </section>
             </div>
 
-            <!-- 7-Day Occurrence Frequency -->
+            <!-- Occurrence Frequency Line Chart -->
             <section class="card">
                 <header class="card-head">
                     <div>
-                        <h3>Occurrence frequency &amp; resolution</h3>
-                        <p class="card-sub">Incoming active alerts against resolved evacuation missions, last 7 days.</p>
+                        <h3>Crisis alerts &amp; response activity over time</h3>
+                        <p class="card-sub">Tracking recent disaster alerts and emergency responses.</p>
                     </div>
-                    <span class="card-note">Live GDACS stream</span>
                 </header>
                 <div class="card-body chart-box chart-box-tall">
                     <canvas id="chart-occurrence-frequency"></canvas>
-                </div>
-            </section>
-
-            <!-- Regional Vulnerability & Hazard Clusters -->
-            <section class="card">
-                <header class="card-head">
-                    <h3>Regional vulnerability &amp; pre-positioning</h3>
-                </header>
-                <div class="table-scroll">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Crisis sector</th>
-                                <th>Primary threat</th>
-                                <th class="num">Vulnerability</th>
-                                <th>Nearest depot</th>
-                                <th class="num">Land ETA</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td class="strong">Ayeyarwady Delta (lower basin)</td>
-                                <td>Monsoon floods / surge</td>
-                                <td class="num sev-critical">8.9</td>
-                                <td>Yangon Central Logistics Base</td>
-                                <td class="num">2.8 hrs</td>
-                                <td><span class="tag tag-warning">Pre-alert</span></td>
-                            </tr>
-                            <tr>
-                                <td class="strong">Sagaing faultline corridor</td>
-                                <td>Tectonic earthquakes</td>
-                                <td class="num sev-warning">7.6</td>
-                                <td>Mandalay Regional Depot</td>
-                                <td class="num">1.9 hrs</td>
-                                <td><span class="tag tag-ok">Active watch</span></td>
-                            </tr>
-                            <tr>
-                                <td class="strong">Rakhine coastal zone</td>
-                                <td>Bay of Bengal cyclones</td>
-                                <td class="num sev-critical">9.1</td>
-                                <td>Naypyidaw Strategic Reserve</td>
-                                <td class="num">4.5 hrs</td>
-                                <td><span class="tag tag-critical">High risk</span></td>
-                            </tr>
-                        </tbody>
-                    </table>
                 </div>
             </section>
         </div>
@@ -341,12 +285,12 @@
                         </div>
                     </section>
 
-                    <!-- Model Explainability & Weights Breakdown -->
+                    <!-- Feature importance / explainer -->
                     <section class="card">
                         <header class="card-head">
                             <div>
                                 <h3>Feature attribution</h3>
-                                <p class="card-sub">Importance coefficients from the RandomForest and gradient boosting regressors.</p>
+                                <p class="card-sub">Dynamic feature weighting derived from the Rescura neural decision model.</p>
                             </div>
                             <span class="card-note">SHAP</span>
                         </header>
@@ -358,23 +302,30 @@
                                 <div class="weight">
                                     <div class="weight-head">
                                         <span>Crisis severity</span>
-                                        <span class="weight-pct">45%</span>
+                                        <span class="weight-pct" id="shap-pct-sev">45%</span>
                                     </div>
                                     <p>Exponential scalar applied to Sphere water and trauma requirements above severity 7.0.</p>
                                 </div>
                                 <div class="weight">
                                     <div class="weight-head">
                                         <span>Population at risk</span>
-                                        <span class="weight-pct">35%</span>
+                                        <span class="weight-pct" id="shap-pct-pop">35%</span>
                                     </div>
                                     <p>Demographic headcount multiplied by nutritional daily intake constants.</p>
                                 </div>
                                 <div class="weight">
                                     <div class="weight-head">
-                                        <span>Haversine depot distance</span>
-                                        <span class="weight-pct">20%</span>
+                                        <span>Depot proximity &amp; transit</span>
+                                        <span class="weight-pct" id="shap-pct-dist">12%</span>
                                     </div>
-                                    <p>Drives transport fuel burn and multi-modal transit friction.</p>
+                                    <p>Drives transport fuel burn, routing speed, and multi-modal transit selection.</p>
+                                </div>
+                                <div class="weight">
+                                    <div class="weight-head">
+                                        <span>Road blockade</span>
+                                        <span class="weight-pct" id="shap-pct-road">8%</span>
+                                    </div>
+                                    <p>Transit delay penalty and land convoy route disruption.</p>
                                 </div>
                             </div>
                         </div>
@@ -388,199 +339,112 @@
             <section class="card">
                 <header class="card-head">
                     <div>
-                        <h3>Regional depots &amp; inventory health</h3>
-                        <p class="card-sub">Warehouse reserves, daily burn rates, and shortage forecasts.</p>
+                        <h3>Regional Depots &amp; Stock Levels</h3>
+                        <p class="card-sub">Warehouse reserves, daily usage rates, and days of supplies remaining.</p>
                     </div>
-                    <span class="card-note">4 hubs online</span>
+                    <span class="card-note" id="depots-online-badge">3 hubs online</span>
                 </header>
-                <div class="card-body depot-grid">
-                    <div class="depot">
-                        <div class="depot-head">
-                            <div>
-                                <h4>Yangon Central Base</h4>
-                                <p>Lower delta &amp; marine gateway</p>
-                            </div>
-                            <span class="tag tag-warning">11 days</span>
-                        </div>
-                        <div class="depot-meters">
-                            <div class="meter">
-                                <div class="meter-head">
-                                    <span>Water</span>
-                                    <span class="meter-val">850k / 1.2M L</span>
-                                </div>
-                                <div class="meter-track"><div class="meter-fill meter-fill-warning" style="width: 71%"></div></div>
-                            </div>
-                            <div class="meter">
-                                <div class="meter-head">
-                                    <span>Food</span>
-                                    <span class="meter-val">120k / 180k packs</span>
-                                </div>
-                                <div class="meter-track"><div class="meter-fill meter-fill-warning" style="width: 66%"></div></div>
-                            </div>
-                            <div class="meter">
-                                <div class="meter-head">
-                                    <span>Medical</span>
-                                    <span class="meter-val">3,400 kits</span>
-                                </div>
-                                <div class="meter-track"><div class="meter-fill meter-fill-warning" style="width: 85%"></div></div>
-                            </div>
-                        </div>
-                        <button onclick="simulateRestock('Yangon Central')" class="btn btn-xs" style="width:100%;">Trigger restock</button>
-                    </div>
-
-                    <div class="depot">
-                        <div class="depot-head">
-                            <div>
-                                <h4>Naypyidaw Reserve</h4>
-                                <p>Central strategic stockpile</p>
-                            </div>
-                            <span class="tag tag-ok">26 days</span>
-                        </div>
-                        <div class="depot-meters">
-                            <div class="meter">
-                                <div class="meter-head">
-                                    <span>Water</span>
-                                    <span class="meter-val">1.4M / 1.5M L</span>
-                                </div>
-                                <div class="meter-track"><div class="meter-fill meter-fill-ok" style="width: 93%"></div></div>
-                            </div>
-                            <div class="meter">
-                                <div class="meter-head">
-                                    <span>Food</span>
-                                    <span class="meter-val">220k / 250k packs</span>
-                                </div>
-                                <div class="meter-track"><div class="meter-fill meter-fill-ok" style="width: 88%"></div></div>
-                            </div>
-                            <div class="meter">
-                                <div class="meter-head">
-                                    <span>Medical</span>
-                                    <span class="meter-val">5,100 kits</span>
-                                </div>
-                                <div class="meter-track"><div class="meter-fill meter-fill-ok" style="width: 95%"></div></div>
-                            </div>
-                        </div>
-                        <button onclick="simulateRestock('Naypyidaw Reserve')" class="btn btn-xs" style="width:100%;">Trigger restock</button>
-                    </div>
-
-                    <div class="depot">
-                        <div class="depot-head">
-                            <div>
-                                <h4>Mandalay Regional Depot</h4>
-                                <p>Northern faultline corridor</p>
-                            </div>
-                            <span class="tag tag-critical">5 days</span>
-                        </div>
-                        <div class="depot-meters">
-                            <div class="meter">
-                                <div class="meter-head">
-                                    <span>Water</span>
-                                    <span class="meter-val">560k / 1.2M L</span>
-                                </div>
-                                <div class="meter-track"><div class="meter-fill meter-fill-critical" style="width: 46%"></div></div>
-                            </div>
-                            <div class="meter">
-                                <div class="meter-head">
-                                    <span>Food</span>
-                                    <span class="meter-val">80k / 200k packs</span>
-                                </div>
-                                <div class="meter-track"><div class="meter-fill meter-fill-critical" style="width: 40%"></div></div>
-                            </div>
-                            <div class="meter">
-                                <div class="meter-head">
-                                    <span>Medical</span>
-                                    <span class="meter-val">1,900 kits</span>
-                                </div>
-                                <div class="meter-track"><div class="meter-fill meter-fill-critical" style="width: 52%"></div></div>
-                            </div>
-                        </div>
-                        <button onclick="simulateRestock('Mandalay Regional')" class="btn btn-xs" style="width:100%;">Trigger restock</button>
-                    </div>
-
-                    <div class="depot">
-                        <div class="depot-head">
-                            <div>
-                                <h4>Bangkok ASEAN Base</h4>
-                                <p>Regional surge hub</p>
-                            </div>
-                            <span class="tag tag-ok">31 days</span>
-                        </div>
-                        <div class="depot-meters">
-                            <div class="meter">
-                                <div class="meter-head">
-                                    <span>Water</span>
-                                    <span class="meter-val">2.8M / 3.0M L</span>
-                                </div>
-                                <div class="meter-track"><div class="meter-fill meter-fill-ok" style="width: 93%"></div></div>
-                            </div>
-                            <div class="meter">
-                                <div class="meter-head">
-                                    <span>Food</span>
-                                    <span class="meter-val">450k / 500k packs</span>
-                                </div>
-                                <div class="meter-track"><div class="meter-fill meter-fill-ok" style="width: 90%"></div></div>
-                            </div>
-                            <div class="meter">
-                                <div class="meter-head">
-                                    <span>Medical</span>
-                                    <span class="meter-val">12,000 kits</span>
-                                </div>
-                                <div class="meter-track"><div class="meter-fill meter-fill-ok" style="width: 96%"></div></div>
-                            </div>
-                        </div>
-                        <button onclick="simulateRestock('Bangkok ASEAN')" class="btn btn-xs" style="width:100%;">Trigger restock</button>
+                <div class="card-body depot-grid" id="depots-grid-container">
+                    <div class="p-6 text-center text-slate-400 text-xs font-semibold col-span-3">
+                        Loading depot warehouse capacities...
                     </div>
                 </div>
             </section>
         </div>
 
-        <!-- ==================== TAB 4: MULTI-MODAL TRANSPORT OPTIMIZATION ==================== -->
+        <!-- ==================== TAB 4: TRANSPORT TIMES ==================== -->
         <div id="section-tab-transport" class="analytics-tab-content stack hidden">
+            <!-- Simple Travel Time Estimator -->
+            <div class="pair" style="align-items: stretch;">
+                <!-- Left: Distance Slider -->
+                <section class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
+                    <header class="card-head">
+                        <div>
+                            <h3>Travel Time Estimator</h3>
+                            <p class="card-sub">Move the slider to compare travel times for land, air, and water.</p>
+                        </div>
+                    </header>
+                    <div class="card-body form-stack" style="padding: 20px;">
+                        <div class="field">
+                            <div class="field-row" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <label class="field-label" for="transport-distance-slider" style="font-weight: 600; font-size: 13px; color: #334155;">Distance to destination</label>
+                                <span class="field-value" id="transport-val-distance" style="font-size: 18px; font-weight: 700; color: #2563eb; font-family: var(--font-mono);">100 km</span>
+                            </div>
+                            <input type="range" id="transport-distance-slider" min="5" max="500" step="5" value="100" oninput="onTransportDistanceInput(this.value)" class="range" style="width: 100%; cursor: pointer;">
+                        </div>
+                        <p style="font-size: 12px; color: #94a3b8; margin-top: 8px; line-height: 1.4;">
+                            Calculates realistic travel times including road detours and preparation times.
+                        </p>
+                    </div>
+                </section>
+
+                <!-- Right: Clean Comparison Cards -->
+                <section class="card" style="display: flex; flex-direction: column;">
+                    <header class="card-head">
+                        <div>
+                            <h3>Estimated Travel Times</h3>
+                            <p class="card-sub">Calculated for the chosen distance.</p>
+                        </div>
+                    </header>
+                    <div class="card-body" style="padding: 16px;">
+                        <div class="metric-row" style="grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; border: 1px solid var(--border-color); border-radius: var(--radius); overflow: hidden;">
+                            <div class="metric" style="padding: 16px;">
+                                <span class="eyebrow" style="color: #2563eb; font-weight: 600; font-size: 12px; text-transform: uppercase;">Land (Truck)</span>
+                                <span class="metric-value" id="calc-land-eta" style="font-size: 24px; font-weight: 700; color: #0f172a; margin: 4px 0;">3h 6m</span>
+                                <span style="font-size: 12px; color: #64748b;">~50 km/h avg</span>
+                            </div>
+                            <div class="metric" style="padding: 16px;">
+                                <span class="eyebrow" style="color: #0284c7; font-weight: 600; font-size: 12px; text-transform: uppercase;">Air (Helicopter)</span>
+                                <span class="metric-value" id="calc-air-eta" style="font-size: 24px; font-weight: 700; color: #0f172a; margin: 4px 0;">0h 47m</span>
+                                <span style="font-size: 12px; color: #64748b;">~220 km/h speed</span>
+                            </div>
+                            <div class="metric" style="padding: 16px;">
+                                <span class="eyebrow" style="color: #475569; font-weight: 600; font-size: 12px; text-transform: uppercase;">Water (Boat)</span>
+                                <span class="metric-value" id="calc-water-eta" style="font-size: 24px; font-weight: 700; color: #0f172a; margin: 4px 0;">6h 12m</span>
+                                <span style="font-size: 12px; color: #64748b;">~25 km/h speed</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Transport Comparison Table -->
             <section class="card">
                 <header class="card-head">
                     <div>
-                        <h3>Transport speed vs. cost</h3>
-                        <p class="card-sub">Comparative performance across land convoys, air helicopters, and river fleets.</p>
+                        <h3>Transport Options Overview</h3>
+                        <p class="card-sub">Average speeds and cargo capacities for each transport type.</p>
                     </div>
                 </header>
 
-                <!-- Three modes across four attributes: a table beats three card
-                     stacks, since the whole point is comparing down a column. -->
                 <div class="table-scroll">
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th>Mode</th>
-                                <th>Platform</th>
-                                <th class="num">Avg speed</th>
-                                <th class="num">Payload</th>
-                                <th class="num">Cost / ton-km</th>
-                                <th>Weather risk</th>
+                                <th>Transport Type</th>
+                                <th class="num">Average Speed</th>
+                                <th class="num">Cargo Capacity</th>
+                                <th class="num">Estimated Cost</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody id="transport-modes-tbody">
                             <tr>
-                                <td class="strong">Land heavy convoy</td>
-                                <td class="muted">6x6 all-terrain trucks</td>
+                                <td class="strong">Land (Trucks)</td>
                                 <td class="num">45 km/h</td>
-                                <td class="num">18.0 t</td>
-                                <td class="num">$1.20</td>
-                                <td><span class="tag tag-warning">Moderate</span></td>
+                                <td class="num">18 tons</td>
+                                <td class="num">$1.20 / ton-km</td>
                             </tr>
                             <tr>
-                                <td class="strong">Air helicopter / airdrop</td>
-                                <td class="muted">Mil Mi-17 &amp; Bell 412</td>
+                                <td class="strong">Air (Helicopter)</td>
                                 <td class="num">220 km/h</td>
-                                <td class="num">3.5 t</td>
-                                <td class="num">$8.50</td>
-                                <td><span class="tag tag-critical">High (wind / rain)</span></td>
+                                <td class="num">3.5 tons</td>
+                                <td class="num">$8.50 / ton-km</td>
                             </tr>
                             <tr>
-                                <td class="strong">River &amp; delta barge</td>
-                                <td class="muted">Ayeyarwady flotilla</td>
+                                <td class="strong">Water (Boat)</td>
                                 <td class="num">28 km/h</td>
-                                <td class="num">25.0 t</td>
-                                <td class="num">$0.80</td>
-                                <td><span class="tag tag-ok">Low (flood proof)</span></td>
+                                <td class="num">25 tons</td>
+                                <td class="num">$0.80 / ton-km</td>
                             </tr>
                         </tbody>
                     </table>
@@ -590,8 +454,11 @@
             <!-- Transport Trade-Off Curve Chart -->
             <section class="card">
                 <header class="card-head">
-                    <h3>Response time vs. budget cost by distance</h3>
-                    <span class="card-note">Hours / USD</span>
+                    <div>
+                        <h3>Estimated Travel Time by Distance</h3>
+                        <p class="card-sub">Comparing travel times for land, air, and water across different distances.</p>
+                    </div>
+                    <span class="card-note">Hours / Distance</span>
                 </header>
                 <div class="card-body chart-box chart-box-tall">
                     <canvas id="chart-transport-tradeoff"></canvas>
@@ -599,62 +466,13 @@
             </section>
         </div>
 
-        <!-- ==================== TAB 5: AI PRESCRIPTIVE RECOMMENDATIONS ==================== -->
-        <div id="section-tab-recommendations" class="analytics-tab-content stack hidden">
-            <section class="card">
-                <header class="card-head">
-                    <div>
-                        <h3>Prescriptive action recommendations</h3>
-                        <p class="card-sub">Supply-chain rebalancing and route optimisation generated by Rescura AI.</p>
-                    </div>
-                </header>
 
-                <!-- Each row states the action, the reasoning, and one control.
-                     No tinted panels: the recommendations differ in content,
-                     not in kind, so they should not differ in colour. -->
-                <div class="rec-list">
-                    <div class="rec">
-                        <div class="rec-main">
-                            <div class="rec-meta">
-                                <span class="tag">Inter-depot rebalancing</span>
-                                <span class="rec-priority"><span class="dot dot-critical"></span> High priority</span>
-                            </div>
-                            <h4>Reallocate 45,000&nbsp;L water from Naypyidaw to Mandalay</h4>
-                            <p>Mandalay Regional Depot is at <b>46% capacity</b> while Naypyidaw holds a <b>93% buffer</b>. A 3-truck convoy along Highway 1 secures northern earthquake readiness.</p>
-                        </div>
-                        <button onclick="applyRecommendation(this, 'Rebalance Naypyidaw -&gt; Mandalay Authorized')" class="btn btn-primary">Authorise</button>
-                    </div>
 
-                    <div class="rec">
-                        <div class="rec-main">
-                            <div class="rec-meta">
-                                <span class="tag">Cost optimisation</span>
-                                <span class="rec-priority"><span class="dot dot-ok"></span> Saves $18,400</span>
-                            </div>
-                            <h4>Switch Ayeyarwady Delta mission to the river barge fleet</h4>
-                            <p>Shifting from air helicopter to river barges cuts mission cost by <b>62%</b> for only <b>+45 min</b> of arrival time, thanks to direct water access.</p>
-                        </div>
-                        <button onclick="applyRecommendation(this, 'River Barge Mode Shift Authorized')" class="btn btn-primary">Approve shift</button>
-                    </div>
 
-                    <div class="rec">
-                        <div class="rec-main">
-                            <div class="rec-meta">
-                                <span class="tag">Advance pre-positioning</span>
-                                <span class="rec-priority"><span class="dot dot-warning"></span> Seasonal risk</span>
-                            </div>
-                            <h4>Pre-stage 20,000 food packs to Bago ahead of monsoon inundation</h4>
-                            <p>Historical GIS time-series shows an <b>84% probability</b> of flash floods in the Bago basin within 14 days. Pre-positioning avoids costly emergency airdrops.</p>
-                        </div>
-                        <button onclick="applyRecommendation(this, 'Pre-Positioning Authorized')" class="btn btn-primary">Approve pre-stage</button>
-                    </div>
-                </div>
-            </section>
-        </div>
 
     </div>
 
     <!-- Analytics Logic -->
-    <script src="analytics.js?v=20260818-minimal"></script>
+    <script src="analytics.js?v=20260818-clean-v8"></script>
 </body>
 </html>

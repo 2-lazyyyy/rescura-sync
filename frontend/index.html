@@ -16,7 +16,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
     <!-- Global CSS Stylesheet -->
-    <link rel="stylesheet" href="style.css?v=20260818-grab-v1">
+    <link rel="stylesheet" href="style.css?v=20260818-clean-v5">
 
     <!-- Supabase JS CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -85,102 +85,64 @@
                 <svg class="icon icon-sm" aria-hidden="true"><use href="#i-database"/></svg>
                 <span class="btn-label">Datasets</span>
             </button>
-            <button class="btn-nav-purple" id="btn-pdf-download" onclick="downloadActionPlanPDF(1)" title="Download action plan PDF">
-                <svg class="icon icon-sm" id="pdf-icon" aria-hidden="true"><use href="#i-file"/></svg>
-                <span class="btn-label">Report</span>
-            </button>
-            <button class="btn-nav-teal btn-icon" id="btn-refresh-logistics" onclick="refreshLogistics()" title="Refresh logistics" aria-label="Refresh logistics">
-                <svg class="icon icon-sm" id="refresh-icon" aria-hidden="true"><use href="#i-refresh"/></svg>
-            </button>
-            <button class="btn-nav-blue" id="btn-sync-ai" onclick="syncData()" title="Sync AI data">
-                <svg class="icon icon-sm" id="sync-icon" aria-hidden="true"><use href="#i-zap"/></svg>
-                <span class="btn-label">Sync AI</span>
+            <button class="btn-nav-blue" id="btn-sync-ai" onclick="syncData()" title="Refresh live data">
+                <svg class="icon icon-sm" id="sync-icon" aria-hidden="true"><use href="#i-refresh"/></svg>
+                <span class="btn-label">Refresh Data</span>
             </button>
         </div>
     </nav>
 
     <!-- Map Section -->
-    <div class="shell" style="margin-top: 88px; margin-bottom: 48px;">
-        <!-- Metric row: one shared strip, hairline-divided. No per-card colour. -->
-        <div class="metric-row" role="group" aria-label="Mission summary">
-            <div class="metric">
-                <span class="eyebrow">Active disasters</span>
-                <span class="metric-value" id="stat-disasters">0</span>
-            </div>
-            <div class="metric">
-                <span class="eyebrow">Water needed</span>
-                <span class="metric-value"><span id="total-water">0</span><span class="metric-unit">L</span></span>
-            </div>
-            <div class="metric">
-                <span class="eyebrow">Food needed</span>
-                <span class="metric-value"><span id="total-food">0</span><span class="metric-unit">packs</span></span>
-            </div>
-            <div class="metric">
-                <span class="eyebrow">Avg rescue time</span>
-                <span class="metric-value"><span id="avg-time">0</span><span class="metric-unit">hrs</span></span>
-            </div>
-            <div class="metric">
-                <span class="eyebrow">Pending SOS</span>
-                <span class="metric-value" id="stat-pending-sos">0</span>
-            </div>
-            <div class="metric">
-                <span class="eyebrow">Dispatched</span>
-                <span class="metric-value" id="stat-dispatched">0</span>
-            </div>
-        </div>
-
-        <!-- Myanmar Quick Focus & Filter Bar -->
-        <div class="myanmar-radar-bar" id="myanmar-radar-bar">
+    <div class="shell" style="margin-top: 96px; margin-bottom: 48px;">
+        <!-- Global Quick Focus & Continent Filter Bar -->
+        <div class="myanmar-radar-bar global-radar-bar" id="global-radar-bar" style="margin-bottom: 18px;">
             <div class="radar-label">
                 <span class="radar-ping"></span>
-                <strong>Myanmar Incident Radar:</strong>
+                <strong>Global Incident Radar:</strong>
             </div>
-            <div class="radar-chips">
-                <button class="chip active" onclick="filterMapRegion('all')">🌐 All Active</button>
-                <button class="chip chip-priority" onclick="filterMapRegion('myanmar')">🇲🇲 All Myanmar</button>
-                <button class="chip" onclick="filterMapRegion('bago_yangon')">Bago / Yangon</button>
-                <button class="chip" onclick="filterMapRegion('mandalay_sagaing')">Mandalay / Sagaing</button>
-                <button class="chip" onclick="filterMapRegion('delta')">Ayeyarwady Delta</button>
-                <button class="chip" onclick="filterMapRegion('shan')">Shan Plateau</button>
-                <button class="chip" onclick="filterMapRegion('rakhine')">Rakhine / Western</button>
+            <div class="radar-chips" id="radar-continent-chips">
+                <button class="chip active" id="radar-chip-all" onclick="filterByContinent('All')">All Active <span class="chip-count" id="radar-cnt-all">0</span></button>
+                <button class="chip" id="radar-chip-asia" onclick="filterByContinent('Asia')">🌏 Asia <span class="chip-count" id="radar-cnt-asia">0</span></button>
+                <button class="chip" id="radar-chip-europe" onclick="filterByContinent('Europe')">🌍 Europe <span class="chip-count" id="radar-cnt-europe">0</span></button>
+                <button class="chip" id="radar-chip-americas" onclick="filterByContinent('Americas')">🌎 Americas <span class="chip-count" id="radar-cnt-americas">0</span></button>
+                <button class="chip" id="radar-chip-africa" onclick="filterByContinent('Africa')">🌍 Africa <span class="chip-count" id="radar-cnt-africa">0</span></button>
+                <button class="chip" id="radar-chip-oceania" onclick="filterByContinent('Oceania')">🌏 Oceania <span class="chip-count" id="radar-cnt-oceania">0</span></button>
             </div>
         </div>
 
         <!-- Leaflet Map Container with Floating Grab Navigation HUD -->
         <div class="map-frame" style="position: relative;">
+            <div id="gis-mode-badge" class="gis-mode-badge hidden"></div>
             <div id="map"></div>
 
             <!-- Grab-Style Turn-by-Turn Navigation HUD (Floating Overlay) -->
-            <div id="grab-nav-hud" class="grab-nav-hud hidden">
+            <div id="grab-nav-hud" class="grab-nav-hud hidden" style="display:none !important;">
                 <div class="grab-nav-header">
                     <div class="grab-nav-title-group">
                         <div class="grab-nav-tag">
                             <span class="pulse-dot"></span>
-                            <span>LIVE DISPATCH GUIDANCE</span>
+                            <span>DISPATCH GUIDANCE</span>
                         </div>
                         <h3 id="grab-nav-dest-title" class="grab-nav-title">Disaster Destination</h3>
                         <div class="grab-nav-meta">
                             <span class="grab-badge grab-badge-depot" id="grab-nav-origin">Yangon Central Base</span>
-                            <span class="grab-arrow">➔</span>
+                            <span class="grab-arrow">&rarr;</span>
                             <span class="grab-badge grab-badge-eta" id="grab-nav-eta">--</span>
                             <span class="grab-badge grab-badge-dist" id="grab-nav-dist">-- km</span>
                         </div>
                     </div>
-                    <button class="grab-nav-close" onclick="closeTurnByTurnNavigation()" title="Close Navigation">✕</button>
+                    <button class="grab-nav-close" onclick="closeTurnByTurnNavigation()" title="Close Navigation">&times;</button>
                 </div>
 
                 <!-- Multi-modal Mode Selector -->
                 <div class="grab-mode-selector">
                     <button class="mode-btn active" id="btn-mode-land" onclick="switchRouteMode('land')">
-                        <span class="mode-icon">🚚</span>
                         <span class="mode-text">Land Convoy</span>
                     </button>
                     <button class="mode-btn" id="btn-mode-air" onclick="switchRouteMode('air')">
-                        <span class="mode-icon">🚁</span>
                         <span class="mode-text">Air Airlift</span>
                     </button>
                     <button class="mode-btn" id="btn-mode-water" onclick="switchRouteMode('water')">
-                        <span class="mode-icon">🚢</span>
                         <span class="mode-text">Water Barge</span>
                     </button>
                 </div>
@@ -198,8 +160,8 @@
                 <!-- Navigation Action Footer -->
                 <div class="grab-nav-footer">
                     <button class="btn btn-primary grab-dispatch-btn" id="btn-start-dispatch" onclick="toggleVehicleSimulation()">
-                        <span id="dispatch-icon">▶</span>
-                        <span id="dispatch-label">Start Vehicle Simulation</span>
+                        <span id="dispatch-icon">&#9654;</span>
+                        <span id="dispatch-label">Start Route Simulation</span>
                     </button>
                     <div class="simulation-progress hidden" id="simulation-progress-bar">
                         <div class="progress-fill" id="simulation-progress-fill"></div>
@@ -311,9 +273,9 @@
         </div>
     </div>
 
-    <!-- Dynamic Live Info Blocks (Real GDACS & Copernicus Telemetry) -->
+    <!-- Dynamic Live Info Blocks (Real GDACS & UN Telemetry) -->
     <div class="shell" style="margin-bottom: 64px;">
-      <div class="triple">
+      <div class="double">
         <!-- Virtual OSOCC Live Telemetry -->
         <section id="virtual-osocc" class="panel" style="scroll-margin-top: 88px;">
             <header class="panel-head">
@@ -323,18 +285,6 @@
             </header>
             <div id="virtual-osocc-container" class="panel-body">
                 <div class="panel-empty">Loading coordinator feeds…</div>
-            </div>
-        </section>
-
-        <!-- Copernicus & Satellite GIS -->
-        <section id="maps-imagery" class="panel" style="scroll-margin-top: 88px;">
-            <header class="panel-head">
-                <svg class="icon icon-sm" aria-hidden="true"><use href="#i-satellite"/></svg>
-                <h3>Copernicus &amp; satellite GIS</h3>
-                <span class="panel-source">Sentinel-2 / NASA</span>
-            </header>
-            <div id="maps-imagery-container" class="panel-body panel-body-grid">
-                <div class="panel-empty">Loading satellite layers…</div>
             </div>
         </section>
 
@@ -382,6 +332,10 @@
                     <span class="font-mono font-bold text-amber-600" id="modal-food">0 Packs</span>
                 </div>
                 <div class="flex justify-between items-center text-sm text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                    <span>🏥 Required Medical Kits:</span>
+                    <span class="font-mono font-bold text-emerald-600" id="modal-medical">0 Kits</span>
+                </div>
+                <div class="flex justify-between items-center text-sm text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-200">
                     <span>🛡️ Assigned Relief Depot:</span>
                     <span class="font-mono font-bold text-emerald-600" id="modal-depot">Nearest Depot</span>
                 </div>
@@ -426,22 +380,19 @@
         <!-- Modal Card (Centered) -->
         <div class="relative w-full max-w-6xl bg-white border border-slate-200 rounded-3xl shadow-2xl flex flex-col overflow-hidden m-auto" style="max-height: 82vh;">
             <!-- Header -->
-            <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50 shrink-0">
+            <div class="flex items-center justify-between px-7 py-5 border-b border-slate-100 bg-slate-50 shrink-0">
                 <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 border border-blue-200 text-xl">
-                        🗄️
-                    </div>
                     <div>
-                        <div class="flex items-center gap-2">
-                            <h2 class="text-lg font-bold text-slate-900 tracking-tight">Open Datasets & Data Provenance Explorer</h2>
-                            <span class="text-[10px] font-bold uppercase bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-200">Verified Citable Sources</span>
+                        <div class="flex items-center gap-2.5">
+                            <h2 class="text-lg font-bold text-slate-900 tracking-tight">Datasets &amp; Data Provenance</h2>
+                            <span class="text-[10px] font-bold uppercase bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-full border border-emerald-200">Verified Citable Sources</span>
                         </div>
-                        <p class="text-xs text-slate-500 mt-0.5" id="raw-data-desc">Live verifiable CSV datasets powering the Rescura Sync machine learning models.</p>
+                        <p class="text-xs text-slate-600 mt-2 leading-relaxed" id="raw-data-desc">Verifiable CSV datasets powering Rescura Sync machine learning models.</p>
                     </div>
                 </div>
                 <div class="flex items-center gap-3">
-                    <button onclick="downloadCurrentCSV()" class="px-4 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 text-xs font-bold rounded-xl transition-all flex items-center gap-2 shadow-sm">
-                        <span>⬇️</span> Download CSV
+                    <button onclick="downloadCurrentCSV()" class="px-4 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 text-xs font-semibold rounded-xl transition-all flex items-center gap-2 shadow-sm">
+                        Download CSV
                     </button>
                     <button onclick="closeRawDataModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-sm">
                         ✕
@@ -450,21 +401,21 @@
             </div>
             
             <!-- Dataset Tabs & Search Filter -->
-            <div class="px-6 pt-3 pb-3 border-b border-slate-100 bg-white shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div id="raw-data-tabs-container" class="flex gap-2 overflow-x-auto custom-scrollbar flex-1">
+            <div class="px-7 py-4 border-b border-slate-100 bg-white shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div id="raw-data-tabs-container" class="flex flex-wrap gap-2.5 flex-1 items-center" style="scrollbar-width: none; -ms-overflow-style: none;">
                     <div class="text-slate-400 text-xs italic py-1">Loading datasets...</div>
                 </div>
-                <div class="sm:w-64">
-                    <input type="text" id="raw-data-search" onkeyup="filterCsvTable()" placeholder="🔍 Search records..." class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-all font-sans">
+                <div class="sm:w-64 shrink-0">
+                    <input type="text" id="raw-data-search" onkeyup="filterCsvTable()" placeholder="Search records..." class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-all font-sans">
                 </div>
             </div>
 
             <!-- Content Area (Data Table) -->
-            <div class="flex-1 overflow-auto bg-slate-50 p-6 relative">
-                <table class="w-full text-left text-xs text-slate-700 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-                    <thead class="bg-slate-100 sticky top-0 border-b border-slate-200 shadow-sm z-10">
+            <div class="flex-1 overflow-auto bg-white relative">
+                <table class="w-full text-left text-xs text-slate-700 bg-white" style="border-collapse: separate; border-spacing: 0;">
+                    <thead class="sticky top-0 z-20">
                         <tr id="raw-data-thead-row">
-                            <th class="p-3 text-slate-600 font-bold uppercase tracking-wider text-[11px]">Loading...</th>
+                            <th class="p-3 bg-slate-100 text-slate-700 font-bold uppercase tracking-wider text-[11px] border-b border-slate-200">Loading...</th>
                         </tr>
                     </thead>
                     <tbody id="raw-data-tbody" class="divide-y divide-slate-100">
@@ -490,6 +441,6 @@
         crossorigin=""
     ></script>
     <!-- App Logic -->
-    <script src="App.js?v=20260818-grab-v1"></script>
+    <script src="App.js?v=20260818-clean-v15"></script>
 </body>
 </html>

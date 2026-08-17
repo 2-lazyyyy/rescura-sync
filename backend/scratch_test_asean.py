@@ -3,31 +3,33 @@ import os
 import sys
 sys.path.append(os.path.abspath("backend"))
 
-from database import AsyncSessionLocal
+from database import AsyncSessionLocal, init_db_schema
 from main import dashboard_data
 from ml_model import predict_rescue_needs
 
 async def test():
+    await init_db_schema()
     async with AsyncSessionLocal() as db:
         res = await dashboard_data(db)
-        events = res.get('dashboard_data', [])
-        print(f"Total Active Events in DB: {len(events)}\n")
-        
+        events = res.get('dashboard_data', []) if isinstance(res, dict) else []
         asean_events = []
-        for evt in events:
-            lat, lon = evt['latitude'], evt['longitude']
-            if -11.0 <= lat <= 28.5 and 90.0 <= lon <= 141.0:
-                pred = predict_rescue_needs(severity=evt['severity'], affected_people=5000, lat=lat, lon=lon)
-                asean_events.append({
-                    'title': evt['title'],
-                    'lat': lat,
-                    'lon': lon,
-                    'severity': evt['severity'],
-                    'depot': pred['nearest_depot_name'],
-                    'dist_km': pred['distance_km'],
-                    'travel_hrs': pred['dispatch_travel_hours'],
-                    'total_time_hrs': pred['estimated_rescue_time']
-                })
+        if isinstance(events, list):
+            print(f"Total Active Events in DB: {len(events)}\n")
+            
+            for evt in events:
+                lat, lon = float(evt['latitude']), float(evt['longitude'])
+                if -11.0 <= lat <= 28.5 and 90.0 <= lon <= 141.0:
+                    pred = predict_rescue_needs(severity=float(evt['severity']), affected_people=5000, lat=lat, lon=lon)
+                    asean_events.append({
+                        'title': evt['title'],
+                        'lat': lat,
+                        'lon': lon,
+                        'severity': evt['severity'],
+                        'depot': pred['nearest_depot_name'],
+                        'dist_km': pred['distance_km'],
+                        'travel_hrs': pred['dispatch_travel_hours'],
+                        'total_time_hrs': pred['estimated_rescue_time']
+                    })
         
         print(f"Found {len(asean_events)} events in ASEAN region:\n")
         for i, item in enumerate(asean_events, 1):

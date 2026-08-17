@@ -24,8 +24,10 @@ from sqlalchemy.pool import NullPool
 ASYNC_DATABASE_URL = get_async_db_url(raw_db_url)
 SQLITE_DATABASE_URL = "sqlite+aiosqlite:///./rescura_sync.db"
 
+from typing import Any
+
 if ASYNC_DATABASE_URL.startswith("sqlite"):
-    engine_kwargs = {"poolclass": NullPool}
+    engine_kwargs: dict[str, Any] = {"poolclass": NullPool}
 else:
     engine_kwargs = {"pool_size": 25, "max_overflow": 50, "pool_timeout": 30.0}
 

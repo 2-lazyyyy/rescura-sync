@@ -119,7 +119,7 @@ async def find_nearest_depot(target_lat: float, target_lon: float, db: AsyncSess
     result = await db.execute(stmt)
     depots = result.scalars().all()
 
-    closest_depot_info = None
+    closest_depot_info: Dict[str, Any] = {}
     dist = 0.0
 
     if not depots:
@@ -136,9 +136,9 @@ async def find_nearest_depot(target_lat: float, target_lon: float, db: AsyncSess
             dist = haversine_distance(target_lat, target_lon, cast(float, closest.lat), cast(float, closest.lon))
             closest_depot_info = {
                 "id": closest.id,
-                "name": closest.name,
-                "latitude": closest.lat,
-                "longitude": closest.lon,
+                "name": str(closest.name),
+                "latitude": float(cast(Any, closest.lat)),
+                "longitude": float(cast(Any, closest.lon)),
                 "water_inventory": closest.water_capacity_liters,
                 "food_inventory": closest.food_capacity_packs,
                 "distance_km": round(dist, 2)
@@ -167,9 +167,9 @@ async def find_nearest_depot(target_lat: float, target_lon: float, db: AsyncSess
         dist = haversine_distance(target_lat, target_lon, cast(float, closest_depot.latitude), cast(float, closest_depot.longitude))
         closest_depot_info = {
             "id": closest_depot.id,
-            "name": closest_depot.name,
-            "latitude": closest_depot.latitude,
-            "longitude": closest_depot.longitude,
+            "name": str(closest_depot.name),
+            "latitude": float(cast(Any, closest_depot.latitude)),
+            "longitude": float(cast(Any, closest_depot.longitude)),
             "water_inventory": closest_depot.water_inventory,
             "food_inventory": closest_depot.food_inventory,
             "distance_km": round(dist, 2)
@@ -211,10 +211,10 @@ async def get_detailed_turn_by_turn_route(
         duration_minutes = int(round((driving_distance_km / 52.0) * 60) + 25) # 52km/h avg + 25m staging
 
         # Attempt to query public OSRM routing server with fast timeout
-        osrm_url = f"http://router.project-osrm.org/route/v1/driving/{depot_lon},{depot_lat};{target_lon},{target_lat}?overview=full&geometries=geojson&steps=true"
+        osrm_url = f"https://router.project-osrm.org/route/v1/driving/{depot_lon},{depot_lat};{target_lon},{target_lat}?overview=full&geometries=geojson&steps=true"
         try:
-            async with httpx.AsyncClient(timeout=3.0) as client:
-                res = await client.get(osrm_url)
+            async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
+                res = await client.get(osrm_url, headers={"User-Agent": "Mozilla/5.0 RescuraSync/1.0"})
                 if res.status_code == 200:
                     data = res.json()
                     if data.get("routes") and len(data["routes"]) > 0:
@@ -237,14 +237,14 @@ async def get_detailed_turn_by_turn_route(
                                 man = s.get("maneuver", {})
                                 step_type = man.get("type", "turn")
                                 step_mod = man.get("modifier", "straight")
-                                name = s.get("name") or "Primary Highway Corridor"
+                                name = s.get("name") or "Expressway Corridor / National Highway"
                                 step_dist = round(s.get("distance", 0) / 1000.0, 1)
                                 
-                                icon = "⬆️"
-                                if "right" in step_mod: icon = "↪️"
-                                elif "left" in step_mod: icon = "↩️"
-                                elif step_type == "depart": icon = "🚛"
-                                elif step_type == "arrive": icon = "🏁"
+                                icon = "straight"
+                                if "right" in step_mod: icon = "right"
+                                elif "left" in step_mod: icon = "left"
+                                elif step_type == "depart": icon = "depart"
+                                elif step_type == "arrive": icon = "arrive"
 
                                 text_inst = f"{step_type.capitalize()} on {name}"
                                 if step_type == "depart": text_inst = f"Depart from {depot_name}"
@@ -274,10 +274,10 @@ async def get_detailed_turn_by_turn_route(
                 coordinates.append([p_lat, p_lon])
 
             steps = [
-                {"instruction": f"Depart {depot_name} Relief Staging Yard", "road_name": "Depot Terminal Way", "distance_km": 1.2, "icon": "🚛", "type": "depart"},
-                {"instruction": "Merge onto Highway AH1 / Yangon-Mandalay Expressway", "road_name": "Expressway Corridor", "distance_km": round(driving_distance_km * 0.65, 1), "icon": "⬆️", "type": "turn"},
-                {"instruction": "Take Regional Exit toward Emergency Sector", "road_name": "Provincial Trunk Road", "distance_km": round(driving_distance_km * 0.25, 1), "icon": "↪️", "type": "turn"},
-                {"instruction": f"Arrive at Epicenter: {disaster_title}", "road_name": "Relief Sector Zone", "distance_km": round(driving_distance_km * 0.1, 1), "icon": "🏁", "type": "arrive"}
+                {"instruction": f"Depart {depot_name} Relief Staging Yard", "road_name": "Depot Terminal Way", "distance_km": 1.2, "icon": "depart", "type": "depart"},
+                {"instruction": "Merge onto Highway AH1 / Yangon-Mandalay Expressway", "road_name": "Expressway Corridor", "distance_km": round(driving_distance_km * 0.65, 1), "icon": "straight", "type": "turn"},
+                {"instruction": "Take Regional Exit toward Emergency Sector", "road_name": "Provincial Trunk Road", "distance_km": round(driving_distance_km * 0.25, 1), "icon": "right", "type": "turn"},
+                {"instruction": f"Arrive at Epicenter: {disaster_title}", "road_name": "Relief Sector Zone", "distance_km": round(driving_distance_km * 0.1, 1), "icon": "arrive", "type": "arrive"}
             ]
 
         hours = duration_minutes // 60
@@ -287,7 +287,7 @@ async def get_detailed_turn_by_turn_route(
         return {
             "mode": "land",
             "mode_name": "Land Heavy Convoy (Highway)",
-            "vehicle_icon": "🚚",
+            "vehicle_icon": "land",
             "depot_name": depot_name,
             "disaster_title": disaster_title,
             "origin": [depot_lat, depot_lon],
@@ -297,7 +297,7 @@ async def get_detailed_turn_by_turn_route(
             "formatted_eta": formatted_eta,
             "coordinates": coordinates,
             "steps": steps,
-            "hazard_warning": "High Ground Clear: Highway bypasses riverine flooding bottlenecks" if severity < 7.0 else "⚠️ Heavy Convoy Alert: Emergency police escort recommended in high-risk zones"
+            "hazard_warning": "High ground clear: highway bypasses riverine flooding bottlenecks." if severity < 7.0 else "Heavy convoy alert: regional coordination recommended in high-risk zones."
         }
 
     # 2. AIR HELICOPTER FLIGHT CORRIDOR
@@ -315,10 +315,10 @@ async def get_detailed_turn_by_turn_route(
             coordinates.append([p_lat, p_lon])
 
         steps = [
-            {"instruction": f"Take off from {depot_name} Heliport Deck", "road_name": "Airspace Zone Alpha", "distance_km": 0.5, "icon": "🚁", "type": "depart"},
-            {"instruction": "Climb to 3,500 ft cruise vector direct flight path", "road_name": "Direct Air Corridor", "distance_km": round(air_distance_km * 0.8, 1), "icon": "⬆️", "type": "turn"},
-            {"instruction": "Initiate descent over disaster epicenter coordinates", "road_name": "Descent Approach Corridor", "distance_km": round(air_distance_km * 0.2, 1), "icon": "↘️", "type": "turn"},
-            {"instruction": f"Hover & Touchdown at Emergency LZ ({disaster_title})", "road_name": "Field Landing Zone (LZ)", "distance_km": 0.3, "icon": "🏁", "type": "arrive"}
+            {"instruction": f"Take off from {depot_name} Heliport Deck", "road_name": "Airspace Zone Alpha", "distance_km": 0.5, "icon": "depart", "type": "depart"},
+            {"instruction": "Climb to 3,500 ft cruise vector direct flight path", "road_name": "Direct Air Corridor", "distance_km": round(air_distance_km * 0.8, 1), "icon": "straight", "type": "turn"},
+            {"instruction": "Initiate descent over disaster epicenter coordinates", "road_name": "Descent Approach Corridor", "distance_km": round(air_distance_km * 0.2, 1), "icon": "straight", "type": "turn"},
+            {"instruction": f"Hover and touchdown at Emergency LZ ({disaster_title})", "road_name": "Field Landing Zone (LZ)", "distance_km": 0.3, "icon": "arrive", "type": "arrive"}
         ]
 
         hours = flight_minutes // 60
@@ -328,7 +328,7 @@ async def get_detailed_turn_by_turn_route(
         return {
             "mode": "air",
             "mode_name": "Air Transport (Helicopter / Heavy Airlift)",
-            "vehicle_icon": "🚁",
+            "vehicle_icon": "air",
             "depot_name": depot_name,
             "disaster_title": disaster_title,
             "origin": [depot_lat, depot_lon],
@@ -338,7 +338,7 @@ async def get_detailed_turn_by_turn_route(
             "formatted_eta": formatted_eta,
             "coordinates": coordinates,
             "steps": steps,
-            "hazard_warning": "🚁 Recommended for critical trauma cases, severed road bridges, and remote mountainous sectors"
+            "hazard_warning": "Recommended for critical trauma cases, severed road bridges, and remote sectors."
         }
 
     # 3. WATER RESCUE TRANSPORT
@@ -357,10 +357,10 @@ async def get_detailed_turn_by_turn_route(
             coordinates.append([p_lat, p_lon])
 
         steps = [
-            {"instruction": f"Launch rescue barge / hovercraft from {depot_name} Marine Pier", "road_name": "Harbor Terminal Pier", "distance_km": 1.5, "icon": "🚢", "type": "depart"},
-            {"instruction": "Navigate primary navigable waterway channel (Ayeyarwady/Sittaung Basin)", "road_name": "Main Navigation Channel", "distance_km": round(water_distance_km * 0.75, 1), "icon": "⬆️", "type": "turn"},
-            {"instruction": "Enter inundated tributary canal toward disaster sector", "road_name": "Tributary Inundation Sector", "distance_km": round(water_distance_km * 0.2, 1), "icon": "↪️", "type": "turn"},
-            {"instruction": f"Dock at Emergency Riverbank Relief Staging Depot ({disaster_title})", "road_name": "Inundated Pier Staging", "distance_km": 0.8, "icon": "🏁", "type": "arrive"}
+            {"instruction": f"Launch rescue barge / craft from {depot_name} Marine Pier", "road_name": "Harbor Terminal Pier", "distance_km": 1.5, "icon": "depart", "type": "depart"},
+            {"instruction": "Navigate primary navigable waterway channel (Ayeyarwady/Sittaung Basin)", "road_name": "Main Navigation Channel", "distance_km": round(water_distance_km * 0.75, 1), "icon": "straight", "type": "turn"},
+            {"instruction": "Enter inundated tributary canal toward disaster sector", "road_name": "Tributary Inundation Sector", "distance_km": round(water_distance_km * 0.2, 1), "icon": "right", "type": "turn"},
+            {"instruction": f"Dock at Emergency Riverbank Relief Staging ({disaster_title})", "road_name": "Inundated Pier Staging", "distance_km": 0.8, "icon": "arrive", "type": "arrive"}
         ]
 
         hours = water_minutes // 60
@@ -370,7 +370,7 @@ async def get_detailed_turn_by_turn_route(
         return {
             "mode": "water",
             "mode_name": "Water Transport (Rescue Boat / Marine Barge)",
-            "vehicle_icon": "🚢",
+            "vehicle_icon": "water",
             "depot_name": depot_name,
             "disaster_title": disaster_title,
             "origin": [depot_lat, depot_lon],
@@ -380,7 +380,7 @@ async def get_detailed_turn_by_turn_route(
             "formatted_eta": formatted_eta,
             "coordinates": coordinates,
             "steps": steps,
-            "hazard_warning": "🚢 High-capacity transport for bulk water (10,000L+) and supplies into delta inundation zones"
+            "hazard_warning": "High-capacity transport for bulk water and supplies into delta inundation zones."
         }
 
 

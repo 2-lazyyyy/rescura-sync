@@ -48,20 +48,13 @@
             <div class="nav-status-badge">
                 <span>Live</span>
             </div>
-            <a href="index.html" class="btn-nav-amber" id="btn-raw-data" title="Inspect database datasets &amp; provenance">
+            <button class="btn-nav-amber" id="btn-raw-data" onclick="openRawDataModal()" title="Inspect database datasets &amp; provenance">
                 <svg class="icon icon-sm" aria-hidden="true"><use href="#i-database"/></svg>
                 <span class="btn-label">Datasets</span>
-            </a>
-            <button class="btn-nav-purple" id="btn-pdf-download" onclick="downloadActionPlanPDF(1)" title="Download action plan PDF">
-                <svg class="icon icon-sm" id="pdf-icon" aria-hidden="true"><use href="#i-file"/></svg>
-                <span class="btn-label">Report</span>
             </button>
-            <button class="btn-nav-teal btn-icon" id="btn-refresh-logistics" onclick="refreshLogistics()" title="Refresh logistics" aria-label="Refresh logistics">
-                <svg class="icon icon-sm" id="refresh-icon" aria-hidden="true"><use href="#i-refresh"/></svg>
-            </button>
-            <button class="btn-nav-blue" id="btn-sync-ai" onclick="syncData()" title="Sync AI data">
-                <svg class="icon icon-sm" id="sync-icon" aria-hidden="true"><use href="#i-zap"/></svg>
-                <span class="btn-label">Sync AI</span>
+            <button class="btn-nav-blue" id="btn-sync-ai" onclick="syncData()" title="Refresh live data">
+                <svg class="icon icon-sm" id="sync-icon" aria-hidden="true"><use href="#i-refresh"/></svg>
+                <span class="btn-label">Refresh Data</span>
             </button>
         </div>
     </nav>
@@ -78,19 +71,19 @@
         <!-- Summary metrics -->
         <div class="metric-row metric-row-4" role="group" aria-label="Events summary">
             <div class="metric">
-                <span class="eyebrow">Total active events</span>
+                <span class="eyebrow">Active crises</span>
                 <span class="metric-value" id="evt-stat-total">0</span>
             </div>
             <div class="metric">
-                <span class="eyebrow">Severe (rating 7+)</span>
+                <span class="eyebrow">Critical (red / orange)</span>
                 <span class="metric-value sev-critical" id="evt-stat-severe" style="font-size:24px;">0</span>
             </div>
             <div class="metric">
-                <span class="eyebrow">Total water required</span>
+                <span class="eyebrow">Water allocated</span>
                 <span class="metric-value" id="evt-stat-water">0</span>
             </div>
             <div class="metric">
-                <span class="eyebrow">Total food required</span>
+                <span class="eyebrow">Food allocated</span>
                 <span class="metric-value" id="evt-stat-food">0</span>
             </div>
         </div>
@@ -181,9 +174,109 @@
             }
         }
 
-        function downloadActionPlanPDF(evtId = 1) {
-            const targetUrl = `${activeApiHost}/api/export-report/${evtId || 1}`;
-            window.open(targetUrl, '_blank');
+        function downloadActionPlanPDF(options = {}) {
+            let evtId = (typeof options === 'object') ? (options.evtId || 1) : options;
+            const params = new URLSearchParams();
+            if (typeof options === 'object') {
+                if (options.title) params.append('title', options.title);
+                if (options.lat !== '' && options.lat !== undefined && options.lat !== null) params.append('lat', options.lat);
+                if (options.lon !== '' && options.lon !== undefined && options.lon !== null) params.append('lon', options.lon);
+                if (options.sev !== '' && options.sev !== undefined && options.sev !== null) params.append('severity', options.sev);
+                if (options.date) params.append('date', options.date);
+                if (options.waterLiters) params.append('water_liters', options.waterLiters);
+                if (options.foodPacks) params.append('food_packs', options.foodPacks);
+                if (options.budget) params.append('budget', options.budget);
+                if (options.depotName) params.append('depot_name', options.depotName);
+                if (options.distanceKm) params.append('distance_km', options.distanceKm);
+                if (options.landEta) params.append('land_eta', options.landEta);
+                if (options.airEta) params.append('air_eta', options.airEta);
+                if (options.waterEta) params.append('water_eta', options.waterEta);
+            }
+
+            const q = params.toString() ? `?${params.toString()}` : '';
+            const cleanId = encodeURIComponent(evtId || 0);
+            const targetUrl = `${activeApiHost}/api/export-report/${cleanId}${q}`;
+            
+            const a = document.createElement('a');
+            a.href = targetUrl;
+            a.target = '_blank';
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => {
+                if (a.parentNode) document.body.removeChild(a);
+            }, 500);
+        }
+
+        window._allEventsMap = new Map();
+
+        function hashString(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                hash = ((hash << 5) - hash) + str.charCodeAt(i);
+                hash |= 0;
+            }
+            return Math.abs(hash);
+        }
+
+        function registerEventForPdf(alert) {
+            if (!alert) return '';
+            const key = 'evt_' + (alert.id || '') + '_' + hashString(alert.title || '');
+            window._allEventsMap.set(key, alert);
+            return key;
+        }
+
+        function downloadAlertByKey(key) {
+            const evt = window._allEventsMap.get(key);
+            if (!evt) return;
+            const lat = evt.latitude || evt.lat || 0;
+            const lon = evt.longitude || evt.lon || 0;
+            const title = evt.title || 'Disaster Event';
+            const sev = evt.severity || 5.0;
+            const date = evt.created_at || evt.pubDate || '';
+
+            const pred = evt.latest_prediction || (evt.predictions && evt.predictions[0]) || {};
+            const waterLiters = Math.round(pred.water_liters || evt.water_needed_liters || 15000);
+            const foodPacks = Math.round(pred.food_packs || evt.food_needed_packs || 2500);
+            const budget = evt.total_estimated_budget_usd || Math.round((waterLiters * 0.50) + (foodPacks * 3.50));
+
+            const distKm = (evt.nearest_depot && evt.nearest_depot.distance_km)
+                ? evt.nearest_depot.distance_km
+                : getNearestDepotDistance(lat, lon);
+            const depotName = (evt.nearest_depot && evt.nearest_depot.name)
+                ? evt.nearest_depot.name
+                : '';
+
+            const eta = (evt.nearest_depot && evt.nearest_depot.eta_breakdown)
+                ? evt.nearest_depot.eta_breakdown
+                : calculateClientETABreakdown(distKm, sev, title);
+
+            const landEta = (eta && eta.modes && eta.modes.land) ? eta.modes.land.formatted_time : '';
+            const airEta = (eta && eta.modes && eta.modes.air) ? eta.modes.air.formatted_time : '';
+            const waterEta = (eta && eta.modes && eta.modes.water) ? eta.modes.water.formatted_time : '';
+
+            downloadActionPlanPDF({
+                evtId: evt.id || 0,
+                title,
+                lat,
+                lon,
+                sev,
+                date,
+                waterLiters,
+                foodPacks,
+                budget,
+                depotName,
+                distanceKm: distKm,
+                landEta,
+                airEta,
+                waterEta
+            });
+        }
+
+        function downloadEventFromList(idx) {
+            const evt = (window._filteredEventsData || rawEventsData)[idx];
+            if (!evt) return;
+            const key = registerEventForPdf(evt);
+            downloadAlertByKey(key);
         }
 
         function syncData() {
@@ -405,7 +498,7 @@
 
             rawEventsData.forEach(e => {
                 const sev = e.severity || 5.0;
-                if (sev >= 7.0) severeCount++;
+                if (sev >= 5.0) severeCount++;
                 const pred = e.latest_prediction || (e.predictions && e.predictions[0]) || {};
                 totalWater += pred.water_liters || (e.water_needed_liters || 15000);
                 totalFood += pred.food_packs || (e.food_needed_packs || 2500);
@@ -429,7 +522,8 @@
                 return;
             }
 
-            filtered.forEach(evt => {
+            window._filteredEventsData = filtered;
+            filtered.forEach((evt, index) => {
                 const lat = evt.latitude || evt.lat || 0;
                 const lon = evt.longitude || evt.lon || 0;
                 const title = evt.title || 'Disaster Event';
@@ -466,6 +560,7 @@
                 </div>`;
 
                 const sevClass = sev >= 7.0 ? 'critical' : (sev >= 5.0 ? 'warning' : 'ok');
+                const eventKey = registerEventForPdf(evt);
 
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
@@ -482,8 +577,8 @@
                     <td>${etaCellHtml}</td>
                     <td>
                         <div class="row-actions">
+                            <button onclick="downloadAlertByKey('${eventKey}')" class="btn btn-xs">PDF</button>
                             <a href="index.html?lat=${lat}&lon=${lon}&title=${encodeURIComponent(title)}&sev=${sev}" class="btn btn-xs">Map</a>
-                            <button onclick="downloadActionPlanPDF(${evt.id || 1})" class="btn btn-xs">PDF</button>
                         </div>
                     </td>
                 `;

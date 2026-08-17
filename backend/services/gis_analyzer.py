@@ -1,8 +1,8 @@
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 try:
-    import osmnx as ox
+    import osmnx as ox  # type: ignore
 except ImportError:
-    ox = None
+    ox = None  # type: ignore
 
 from services.depot_service import find_nearest_depot
 
