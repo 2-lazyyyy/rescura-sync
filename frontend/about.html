@@ -7,55 +7,62 @@
     <!-- Google Fonts: Inter & Outfit -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
     <!-- Global CSS Stylesheet -->
-    <link rel="stylesheet" href="style.css?v=20260817-clean-light">
+    <link rel="stylesheet" href="style.css?v=20260818-minimal">
 </head>
 <body>
+    <!-- Icon sprite: one stroked set at a shared weight, so icons read as a family -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+        <defs>
+            <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.4-3 8.3-7 9-4-.7-7-4.6-7-9V6l7-3z"/></symbol>
+            <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></symbol>
+            <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8l-5-5z"/><path d="M14 3v5h5"/></symbol>
+            <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></symbol>
+            <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 10-2.3 6.3"/><path d="M20 5v6h-6"/></symbol>
+            <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+            <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="M8 11l4 4 4-4"/><path d="M4 19h16"/></symbol>
+            <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></symbol>
+            <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M4 12h15"/><path d="M13 6l6 6-6 6"/></symbol>
+            <symbol id="i-radio" viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.5"/><path d="M7.5 7.5a6.4 6.4 0 000 9M16.5 16.5a6.4 6.4 0 000-9"/><path d="M4.5 4.5a10.6 10.6 0 000 15M19.5 19.5a10.6 10.6 0 000-15"/></symbol>
+            <symbol id="i-satellite" viewBox="0 0 24 24"><path d="M12 3a9 9 0 019 9"/><path d="M12 8a4 4 0 014 4"/><circle cx="6.5" cy="17.5" r="3.5"/></symbol>
+            <symbol id="i-news" viewBox="0 0 24 24"><path d="M4 5h13v14H5a1 1 0 01-1-1V5z"/><path d="M17 9h3v8a2 2 0 01-2 2h-1"/><path d="M7 9h7M7 13h7M7 16h4"/></symbol>
+            <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+        </defs>
+    </svg>
+
         <!-- Fixed Global Navigation Bar -->
     <nav class="global-navbar">
         <a href="index.html" class="nav-brand">
-            <span class="nav-brand-icon">🛡️</span>
-            <span>RESCURA SYNC</span>
+            <svg class="nav-brand-icon icon" aria-hidden="true"><use href="#i-shield"/></svg>
+            <span>Rescura Sync</span>
         </a>
         <div class="nav-links">
-            <a href="index.html" class="nav-link">
-                <span>🗺️</span>
-                <span>Live Map</span>
-            </a>
-            <a href="analytics.html" class="nav-link">
-                <span>📊</span>
-                <span>Analytics Dashboard</span>
-            </a>
-            <a href="events.html" class="nav-link">
-                <span>⚠️</span>
-                <span>Disaster Events</span>
-            </a>
-            <a href="knowledge.html" class="nav-link">
-                <span>📖</span>
-                <span>Knowledge Base</span>
-            </a>
-            <a href="about.html" class="nav-link active">
-                <span>ℹ️</span>
-                <span>About Us</span>
-            </a>
+            <a href="index.html" class="nav-link">Live Map</a>
+            <a href="analytics.html" class="nav-link">Analytics</a>
+            <a href="events.html" class="nav-link">Events</a>
+            <a href="knowledge.html" class="nav-link">Knowledge</a>
+            <a href="about.html" class="nav-link active">About</a>
         </div>
         <div class="nav-right-toolbar">
-            <a href="index.html#raw-data-modal" onclick="window.location.href='index.html'; setTimeout(() => openRawDataModal(), 300); return false;" class="btn-nav-amber" id="btn-raw-data" title="Inspect Database Datasets & Provenance">
-                <span>🗄️</span> Open Datasets
-            </a>
-            <button class="btn-nav-purple" id="btn-pdf-download" onclick="downloadActionPlanPDF(1)">
-                <span id="pdf-icon">📄</span> PDF
-            </button>
-            <button class="btn-nav-blue" id="btn-sync-ai" onclick="syncData()">
-                <span id="sync-icon">⚡</span> AI
-            </button>
-            <button class="btn-nav-teal" id="btn-refresh-logistics" onclick="refreshLogistics()">
-                <span id="refresh-icon">🔄</span>
-            </button>
             <div class="nav-status-badge">
-                <span>LIVE TELEMETRY</span>
+                <span>Live</span>
             </div>
+            <a href="index.html" class="btn-nav-amber" id="btn-raw-data" title="Inspect database datasets &amp; provenance">
+                <svg class="icon icon-sm" aria-hidden="true"><use href="#i-database"/></svg>
+                <span class="btn-label">Datasets</span>
+            </a>
+            <button class="btn-nav-purple" id="btn-pdf-download" onclick="downloadActionPlanPDF(1)" title="Download action plan PDF">
+                <svg class="icon icon-sm" id="pdf-icon" aria-hidden="true"><use href="#i-file"/></svg>
+                <span class="btn-label">Report</span>
+            </button>
+            <button class="btn-nav-teal btn-icon" id="btn-refresh-logistics" onclick="refreshLogistics()" title="Refresh logistics" aria-label="Refresh logistics">
+                <svg class="icon icon-sm" id="refresh-icon" aria-hidden="true"><use href="#i-refresh"/></svg>
+            </button>
+            <button class="btn-nav-blue" id="btn-sync-ai" onclick="syncData()" title="Sync AI data">
+                <svg class="icon icon-sm" id="sync-icon" aria-hidden="true"><use href="#i-zap"/></svg>
+                <span class="btn-label">Sync AI</span>
+            </button>
         </div>
     </nav>
 
@@ -63,7 +70,7 @@
     <div class="page-wrapper">
         <div class="page-header">
             <div class="page-title-group">
-                <h1>ℹ️ About Rescura Sync</h1>
+                <h1>About Rescura Sync</h1>
                 <p>Next-generation Situation Awareness Center (SAC) providing real-time disaster detection, spatial demographic calculations, and AI-driven relief logistics.</p>
             </div>
         </div>
@@ -78,7 +85,7 @@
                 </div>
                 <div class="glass-card-body">
                     <p><b>Rescura Sync</b> is designed to empower humanitarian agencies, disaster response units, and command personnel with immediate actionable telemetry during natural disasters. By bridging live global sensor feeds with spatial demographic engines and machine learning, Rescura Sync eliminates operational delays when allocating life-saving supplies.</p>
-                    <p style="margin-top: 10px;">Whether responding to sudden earthquakes, coastal tropical cyclones, flash floods, or regional macro-droughts, the platform computes precise water and food requirements within seconds and identifies optimal evacuation convoy routes from nearby supply hubs.</p>
+                    <p>Whether responding to sudden earthquakes, coastal tropical cyclones, flash floods, or regional macro-droughts, the platform computes precise water and food requirements within seconds and identifies optimal evacuation convoy routes from nearby supply hubs.</p>
                 </div>
             </div>
 
@@ -94,7 +101,7 @@
                         <li><b>Database & ORM:</b> SQLAlchemy Async Session handling SQLite & PostgreSQL data models.</li>
                         <li><b>AI & Analytics:</b> Pandas & scikit-learn ensemble RandomForestRegressor for relief prediction.</li>
                         <li><b>GIS Routing Engine:</b> OSMnx, NetworkX, and Geopy for road graph extraction and Dijkstra routing.</li>
-                        <li><b>Frontend UI:</b> HTML5, Enterprise Dark Mode CSS, Leaflet.js with CartoDB Dark & Esri Satellite layers.</li>
+                        <li><b>Frontend UI:</b> HTML5, a token-driven CSS design system, and Leaflet.js with CartoDB and Esri satellite layers.</li>
                         <li><b>Realtime SOS:</b> Supabase Realtime WebSocket engine sync with mobile civilian apps.</li>
                     </ul>
                 </div>
@@ -123,22 +130,22 @@
                     <span class="badge-tag emerald">Capabilities</span>
                     <span>Core Platform Operational Features</span>
                 </div>
-                <div class="glass-card-body" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-                    <div>
-                        <h4 style="color: #0f172a; font-weight: 700; font-size: 14px; margin-bottom: 6px;">🗺️ Interactive GIS Command Map</h4>
-                        <p style="font-size: 13px;">Full-screen map supporting Clean Light Canvas and Esri Satellite Imagery with dynamic continent filtering, depot markers, and animated route overlays.</p>
+                <div class="glass-card-body feature-grid">
+                    <div class="feature">
+                        <h4>Interactive GIS Command Map</h4>
+                        <p>Full-screen map supporting Clean Light Canvas and Esri Satellite Imagery with dynamic continent filtering, depot markers, and animated route overlays.</p>
                     </div>
-                    <div>
-                        <h4 style="color: #0f172a; font-weight: 700; font-size: 14px; margin-bottom: 6px;">🤖 Multi-Target AI Relief Allocator</h4>
-                        <p style="font-size: 13px;">RandomForest machine learning predictions calculating water volume (liters), food packs, and operation completion time with Sphere Project standard fallbacks.</p>
+                    <div class="feature">
+                        <h4>Multi-Target AI Relief Allocator</h4>
+                        <p>RandomForest machine learning predictions calculating water volume (liters), food packs, and operation completion time with Sphere Project standard fallbacks.</p>
                     </div>
-                    <div>
-                        <h4 style="color: #0f172a; font-weight: 700; font-size: 14px; margin-bottom: 6px;">🚨 Civilian SOS Distress Monitoring</h4>
-                        <p style="font-size: 13px;">Real-time distress signal tracking from mobile civilian apps with immediate depot dispatch assignment and priority routing.</p>
+                    <div class="feature">
+                        <h4>Civilian SOS Distress Monitoring</h4>
+                        <p>Real-time distress signal tracking from mobile civilian apps with immediate depot dispatch assignment and priority routing.</p>
                     </div>
-                    <div>
-                        <h4 style="color: #0f172a; font-weight: 700; font-size: 14px; margin-bottom: 6px;">📄 One-Click Action Plan Export</h4>
-                        <p style="font-size: 13px;">Automated executive PDF action plan report generation powered by fpdf2, including incident details, depot allocations, and emergency contact lists.</p>
+                    <div class="feature">
+                        <h4>One-Click Action Plan Export</h4>
+                        <p>Automated executive PDF action plan report generation powered by fpdf2, including incident details, depot allocations, and emergency contact lists.</p>
                     </div>
                 </div>
             </div>

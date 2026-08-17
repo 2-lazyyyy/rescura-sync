@@ -52,6 +52,64 @@ async function apiFetch(path, options = {}) {
     return null;
 }
 
+/* --------------------------------------------------------------------------
+   Chart theme
+   Charts inherit the page's restraint: a small categorical ramp built around
+   the single accent, hairline gridlines, and no drop shadows or gradients.
+   Series colours are assigned from CHART.series in order, so two charts on the
+   same screen never disagree about what "the first series" looks like.
+   -------------------------------------------------------------------------- */
+const CHART = {
+    series: ['#2563eb', '#60a5fa', '#94a3b8', '#334155'],
+    critical: '#dc2626',
+    warning: '#d97706',
+    ok: '#15803d',
+    grid: '#f0f0f0',
+    tick: '#737373',
+    label: '#404040',
+    surface: '#ffffff'
+};
+
+// Severity ramp: neutral through to critical, ordered low → high.
+CHART.severityRamp = ['#cbd5e1', '#94a3b8', CHART.warning, CHART.critical];
+
+if (window.Chart) {
+    Chart.defaults.font.family = 'Inter, system-ui, sans-serif';
+    Chart.defaults.font.size = 11;
+    Chart.defaults.font.weight = '400';
+    Chart.defaults.color = CHART.tick;
+    Chart.defaults.plugins.legend.labels.usePointStyle = true;
+    Chart.defaults.plugins.legend.labels.boxWidth = 6;
+    Chart.defaults.plugins.legend.labels.padding = 16;
+    Chart.defaults.plugins.legend.labels.color = CHART.label;
+    Chart.defaults.plugins.tooltip.backgroundColor = '#171717';
+    Chart.defaults.plugins.tooltip.titleColor = '#ffffff';
+    Chart.defaults.plugins.tooltip.bodyColor = '#e5e5e5';
+    Chart.defaults.plugins.tooltip.borderWidth = 0;
+    Chart.defaults.plugins.tooltip.cornerRadius = 6;
+    Chart.defaults.plugins.tooltip.padding = 10;
+    Chart.defaults.plugins.tooltip.displayColors = false;
+}
+
+/** Shared axis config so every chart's gridlines and ticks match. */
+function chartScales({ stacked = false, beginAtZero = true } = {}) {
+    return {
+        x: {
+            stacked,
+            border: { display: false },
+            grid: { display: false },
+            ticks: { color: CHART.tick }
+        },
+        y: {
+            stacked,
+            beginAtZero,
+            border: { display: false },
+            grid: { color: CHART.grid, drawTicks: false },
+            ticks: { color: CHART.tick, padding: 8 }
+        }
+    };
+}
+
 // Global Chart Instances
 let chartResourceAllocationInstance = null;
 let chartSeverityInstance = null;
@@ -61,14 +119,16 @@ let chartTransportTradeoffInstance = null;
 
 // Tab Switcher
 function switchAnalyticsTab(tabId) {
+    // The tab's appearance lives entirely in CSS on `.active` — the JS only
+    // says which one is current.
     document.querySelectorAll('.analytics-tab-btn').forEach(btn => {
-        btn.classList.remove('active', 'bg-blue-600', 'text-white', 'shadow-sm');
-        btn.classList.add('bg-white', 'text-slate-600', 'border', 'border-slate-200');
+        btn.classList.remove('active');
+        btn.setAttribute('aria-selected', 'false');
     });
     const targetBtn = document.getElementById(`btn-${tabId}`);
     if (targetBtn) {
-        targetBtn.classList.add('active', 'bg-blue-600', 'text-white', 'shadow-sm');
-        targetBtn.classList.remove('bg-white', 'text-slate-600', 'border', 'border-slate-200');
+        targetBtn.classList.add('active');
+        targetBtn.setAttribute('aria-selected', 'true');
     }
 
     document.querySelectorAll('.analytics-tab-content').forEach(sec => {
@@ -113,6 +173,27 @@ async function fetchAnalyticsData() {
 }
 window.fetchAnalyticsData = fetchAnalyticsData;
 
+/** Shortens a figure for a summary tile; the exact value goes in the tooltip. */
+function compactFigure(n) {
+    const num = Number(n) || 0;
+    if (num >= 1e9) return (num / 1e9).toFixed(1).replace(/\.0$/, '') + 'B';
+    if (num >= 1e6) return (num / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+    if (num >= 1e3) return (num / 1e3).toFixed(1).replace(/\.0$/, '') + 'K';
+    return num.toLocaleString();
+}
+
+/** Writes a metric as value + muted unit, so long figures never wrap mid-number. */
+function setMetric(el, value, unit) {
+    if (!el) return;
+    el.textContent = value;
+    if (unit) {
+        const u = document.createElement('span');
+        u.className = 'metric-unit';
+        u.textContent = unit;
+        el.appendChild(u);
+    }
+}
+
 function updateStatsCards(missionData, dashboardData) {
     // 1. Total Active Events
     const totalEvents = missionData.total_active_disasters || dashboardData.length || 50;
@@ -127,10 +208,8 @@ function updateStatsCards(missionData, dashboardData) {
     // 3. Total Water & Food
     const totalWater = missionData.total_water_liters_needed || 505563465;
     const totalFood = missionData.total_food_packs_needed || 76475021;
-    const elWater = document.getElementById('stat-total-water');
-    if (elWater) elWater.innerText = (totalWater >= 1000000) ? `${(totalWater / 1000000).toFixed(1)}M L` : `${totalWater.toLocaleString()} L`;
-    const elFood = document.getElementById('stat-total-food');
-    if (elFood) elFood.innerText = (totalFood >= 1000000) ? `${(totalFood / 1000000).toFixed(1)}M Packs` : `${totalFood.toLocaleString()} Packs`;
+    setMetric(document.getElementById('stat-total-water'), compactFigure(totalWater), 'L');
+    setMetric(document.getElementById('stat-total-food'), compactFigure(totalFood), 'packs');
 
     // 4. Total Est. Budget (USD)
     let totalBudget = 0;
@@ -141,9 +220,7 @@ function updateStatsCards(missionData, dashboardData) {
         totalBudget = (totalWater * 0.45) + (totalFood * 3.2);
     }
     const elBudget = document.getElementById('stat-total-budget');
-    if (elBudget) {
-        elBudget.innerText = (totalBudget >= 1000000) ? `$${(totalBudget / 1000000).toFixed(1)}M` : `$${totalBudget.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-    }
+    if (elBudget) elBudget.textContent = `$${compactFigure(totalBudget)}`;
 }
 
 function drawResourceAllocationChart(analyticsData) {
@@ -175,14 +252,6 @@ function drawResourceAllocationChart(analyticsData) {
     const canvas = document.getElementById('chart-resource-allocation');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    
-    let gradientWater = ctx.createLinearGradient(0, 0, 0, 350);
-    gradientWater.addColorStop(0, 'rgba(14, 165, 233, 0.9)');
-    gradientWater.addColorStop(1, 'rgba(14, 165, 233, 0.2)');
-    
-    let gradientFood = ctx.createLinearGradient(0, 0, 0, 350);
-    gradientFood.addColorStop(0, 'rgba(245, 158, 11, 0.9)');
-    gradientFood.addColorStop(1, 'rgba(245, 158, 11, 0.2)');
 
     if (chartResourceAllocationInstance) {
         chartResourceAllocationInstance.destroy();
@@ -194,42 +263,32 @@ function drawResourceAllocationChart(analyticsData) {
             labels: validRegions,
             datasets: [
                 {
-                    label: 'Water (Liters)',
+                    label: 'Water (litres)',
                     data: waterData,
-                    backgroundColor: gradientWater,
-                    borderColor: '#0284c7',
-                    borderWidth: 1,
-                    borderRadius: 6,
-                    barPercentage: 0.65,
-                    categoryPercentage: 0.75
+                    backgroundColor: CHART.series[0],
+                    borderWidth: 0,
+                    borderRadius: 3,
+                    barPercentage: 0.7,
+                    categoryPercentage: 0.7
                 },
                 {
-                    label: 'Food (Packs)',
+                    label: 'Food (packs)',
                     data: foodData,
-                    backgroundColor: gradientFood,
-                    borderColor: '#d97706',
-                    borderWidth: 1,
-                    borderRadius: 6,
-                    barPercentage: 0.65,
-                    categoryPercentage: 0.75
+                    backgroundColor: CHART.series[1],
+                    borderWidth: 0,
+                    borderRadius: 3,
+                    barPercentage: 0.7,
+                    categoryPercentage: 0.7
                 }
             ]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            scales: {
-                x: { stacked: true, grid: { display: false }, ticks: { color: '#64748b', font: { size: 11, family: 'Inter', weight: '600' } } },
-                y: { stacked: true, grid: { color: '#f1f5f9', drawBorder: false }, ticks: { color: '#64748b', font: { size: 11, family: 'Inter', weight: '500' } } }
-            },
+            scales: chartScales({ stacked: true }),
             plugins: {
-                legend: { position: 'top', align: 'end', labels: { color: '#334155', usePointStyle: true, boxWidth: 8, font: { family: 'Inter', weight: '600' } } },
-                tooltip: { 
-                    backgroundColor: 'rgba(15, 23, 42, 0.95)', 
-                    titleColor: '#fff', 
-                    bodyColor: '#cbd5e1', 
-                    borderColor: '#334155', 
-                    borderWidth: 1,
+                legend: { position: 'top', align: 'end' },
+                tooltip: {
                     callbacks: {
                         label: function(context) {
                             return ` ${context.dataset.label}: ${Number(context.raw).toLocaleString()}`;
@@ -265,29 +324,24 @@ function drawSeverityChart(dashboardData) {
     chartSeverityInstance = new Chart(ctx, {
         type: 'doughnut',
         data: {
-            labels: ['Low (0-3.9)', 'Medium (4.0-6.9)', 'High (7.0-8.9)', 'Extreme (9.0+)'],
+            labels: ['Low (0–3.9)', 'Medium (4.0–6.9)', 'High (7.0–8.9)', 'Extreme (9.0+)'],
             datasets: [{
                 data: [low, med, high, extreme],
-                backgroundColor: [
-                    'rgba(16, 185, 129, 0.9)', // Emerald
-                    'rgba(245, 158, 11, 0.9)', // Amber
-                    'rgba(249, 115, 22, 0.9)', // Orange
-                    'rgba(239, 68, 68, 0.9)'   // Red
-                ],
-                borderColor: '#ffffff',
-                borderWidth: 3,
-                hoverOffset: 6
+                // Ordered ramp: severity reads as intensity, not as four hues.
+                backgroundColor: CHART.severityRamp,
+                borderColor: CHART.surface,
+                borderWidth: 2,
+                hoverOffset: 4
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: { position: 'right', labels: { color: '#334155', usePointStyle: true, boxWidth: 8, font: { family: 'Inter', weight: '600' } } },
-                tooltip: { backgroundColor: 'rgba(15, 23, 42, 0.95)', titleColor: '#fff', bodyColor: '#cbd5e1', borderColor: '#334155', borderWidth: 1 }
+                legend: { position: 'right' }
             },
             cutout: '72%',
-            layout: { padding: 10 }
+            layout: { padding: 8 }
         }
     });
 }
@@ -311,13 +365,11 @@ function drawOccurrenceFrequency(dashboardData) {
         chartOccurrenceInstance.destroy();
     }
     
-    let gradientPurple = ctx.createLinearGradient(0, 0, 0, 350);
-    gradientPurple.addColorStop(0, 'rgba(124, 58, 237, 0.25)');
-    gradientPurple.addColorStop(1, 'rgba(124, 58, 237, 0.0)');
-    
-    let gradientBlue = ctx.createLinearGradient(0, 0, 0, 350);
-    gradientBlue.addColorStop(0, 'rgba(37, 99, 235, 0.2)');
-    gradientBlue.addColorStop(1, 'rgba(37, 99, 235, 0.0)');
+    // A light wash under each line keeps the two series separable without
+    // two competing fills fighting for attention.
+    const washIncidents = ctx.createLinearGradient(0, 0, 0, 320);
+    washIncidents.addColorStop(0, 'rgba(37, 99, 235, 0.14)');
+    washIncidents.addColorStop(1, 'rgba(37, 99, 235, 0)');
 
     chartOccurrenceInstance = new Chart(ctx, {
         type: 'line',
@@ -325,41 +377,42 @@ function drawOccurrenceFrequency(dashboardData) {
             labels: dates,
             datasets: [
                 {
-                    label: 'New GDACS Incidents',
+                    label: 'New GDACS incidents',
                     data: counts,
                     fill: true,
-                    backgroundColor: gradientPurple,
-                    borderColor: '#7c3aed',
+                    backgroundColor: washIncidents,
+                    borderColor: CHART.series[0],
                     tension: 0.35,
-                    pointBackgroundColor: '#7c3aed',
-                    pointBorderColor: '#ffffff',
-                    pointRadius: 4,
-                    borderWidth: 2.5
+                    pointBackgroundColor: CHART.series[0],
+                    pointBorderColor: CHART.surface,
+                    pointBorderWidth: 1.5,
+                    pointRadius: 3,
+                    pointHoverRadius: 5,
+                    borderWidth: 2
                 },
                 {
-                    label: 'Resolved Evacuations',
+                    label: 'Resolved evacuations',
                     data: resolvedCounts,
-                    fill: true,
-                    backgroundColor: gradientBlue,
-                    borderColor: '#2563eb',
+                    fill: false,
+                    borderColor: CHART.series[2],
+                    borderDash: [4, 4],
                     tension: 0.35,
-                    pointBackgroundColor: '#2563eb',
-                    pointBorderColor: '#ffffff',
-                    pointRadius: 4,
-                    borderWidth: 2.5
+                    pointBackgroundColor: CHART.series[2],
+                    pointBorderColor: CHART.surface,
+                    pointBorderWidth: 1.5,
+                    pointRadius: 3,
+                    pointHoverRadius: 5,
+                    borderWidth: 2
                 }
             ]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            scales: {
-                x: { grid: { display: false }, ticks: { color: '#64748b', font: { weight: '600' } } },
-                y: { beginAtZero: true, grid: { color: '#f1f5f9', drawBorder: false }, ticks: { color: '#64748b', stepSize: 2 } }
-            },
+            interaction: { mode: 'index', intersect: false },
+            scales: chartScales(),
             plugins: {
-                legend: { position: 'top', align: 'end', labels: { color: '#334155', usePointStyle: true, boxWidth: 8, font: { family: 'Inter', weight: '600' } } },
-                tooltip: { backgroundColor: 'rgba(15, 23, 42, 0.95)', titleColor: '#fff', bodyColor: '#cbd5e1', borderColor: '#334155', borderWidth: 1 }
+                legend: { position: 'top', align: 'end' }
             }
         }
     });
@@ -418,24 +471,21 @@ function drawFeatureImportanceChart() {
     chartFeatureImportanceInstance = new Chart(ctx, {
         type: 'doughnut',
         data: {
-            labels: ['Disaster Severity Index', 'Civilian Population at Risk', 'Haversine Depot Proximity', 'Road Blockade Factor'],
+            labels: ['Disaster severity', 'Population at risk', 'Depot proximity', 'Road blockade'],
             datasets: [{
                 data: [45, 35, 12, 8],
-                backgroundColor: [
-                    'rgba(124, 58, 237, 0.9)',
-                    'rgba(37, 99, 235, 0.9)',
-                    'rgba(16, 185, 129, 0.9)',
-                    'rgba(245, 158, 11, 0.9)'
-                ],
+                // Weights are one quantity, so they share one hue and vary in
+                // lightness — rank is legible without a legend lookup.
+                backgroundColor: CHART.series,
                 borderWidth: 2,
-                borderColor: '#ffffff'
+                borderColor: CHART.surface
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, font: { size: 10, family: 'Inter', weight: '600' } } }
+                legend: { position: 'bottom', labels: { padding: 12 } }
             },
             cutout: '65%'
         }
@@ -461,40 +511,50 @@ function drawTransportTradeoffChart() {
             labels: distances.map(d => `${d} km`),
             datasets: [
                 {
-                    label: '🚚 Land Convoy (Hours)',
+                    label: 'Land convoy',
                     data: landTimes,
-                    borderColor: '#2563eb',
-                    backgroundColor: 'rgba(37, 99, 235, 0.1)',
-                    borderWidth: 2.5,
-                    tension: 0.3
+                    borderColor: CHART.series[0],
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 2,
+                    pointHoverRadius: 5,
+                    pointBackgroundColor: CHART.series[0]
                 },
                 {
-                    label: '🚁 Air Helicopter (Hours)',
+                    label: 'Air helicopter',
                     data: airTimes,
-                    borderColor: '#7c3aed',
-                    backgroundColor: 'rgba(124, 58, 237, 0.1)',
-                    borderWidth: 2.5,
-                    tension: 0.3
+                    borderColor: CHART.series[1],
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 2,
+                    pointHoverRadius: 5,
+                    pointBackgroundColor: CHART.series[1]
                 },
                 {
-                    label: '🚢 Rescue River Boat (Hours)',
+                    label: 'River barge',
                     data: boatTimes,
-                    borderColor: '#0d9488',
-                    backgroundColor: 'rgba(13, 148, 136, 0.1)',
-                    borderWidth: 2.5,
-                    tension: 0.3
+                    borderColor: CHART.series[2],
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 2,
+                    pointHoverRadius: 5,
+                    pointBackgroundColor: CHART.series[2]
                 }
             ]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
             scales: {
-                x: { grid: { display: false }, ticks: { color: '#64748b', font: { weight: '600' } } },
-                y: { title: { display: true, text: 'Transit Time (Hours)' }, ticks: { color: '#64748b' } }
+                ...chartScales(),
+                y: {
+                    ...chartScales().y,
+                    title: { display: true, text: 'Transit time (hours)', color: CHART.tick }
+                }
             },
             plugins: {
-                legend: { position: 'top', align: 'end', labels: { boxWidth: 8, font: { family: 'Inter', weight: '600' } } }
+                legend: { position: 'top', align: 'end' }
             }
         }
     });
@@ -506,9 +566,11 @@ function simulateRestock(depotName) {
 window.simulateRestock = simulateRestock;
 
 function applyRecommendation(btn, message) {
-    btn.innerHTML = '✓ Authorized & Active';
-    btn.classList.remove('bg-blue-600', 'bg-emerald-600', 'bg-amber-600');
-    btn.classList.add('bg-slate-800', 'text-emerald-400');
+    // Once authorised the control becomes a state label, so it drops the
+    // primary treatment and stops competing with the actions still pending.
+    btn.textContent = 'Authorised';
+    btn.classList.remove('btn-primary');
+    btn.classList.add('is-done');
     btn.disabled = true;
     alert(`🚀 ${message}\nAction Plan updated and logged to command telemetry audit trail.`);
 }
