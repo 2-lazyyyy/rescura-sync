@@ -16,7 +16,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
     <!-- Global CSS Stylesheet -->
-    <link rel="stylesheet" href="style.css?v=20260818-minimal">
+    <link rel="stylesheet" href="style.css?v=20260818-grab-v1">
 
     <!-- Supabase JS CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -129,9 +129,83 @@
             </div>
         </div>
 
-        <!-- Leaflet Map Container -->
-        <div class="map-frame">
+        <!-- Myanmar Quick Focus & Filter Bar -->
+        <div class="myanmar-radar-bar" id="myanmar-radar-bar">
+            <div class="radar-label">
+                <span class="radar-ping"></span>
+                <strong>Myanmar Incident Radar:</strong>
+            </div>
+            <div class="radar-chips">
+                <button class="chip active" onclick="filterMapRegion('all')">🌐 All Active</button>
+                <button class="chip chip-priority" onclick="filterMapRegion('myanmar')">🇲🇲 All Myanmar</button>
+                <button class="chip" onclick="filterMapRegion('bago_yangon')">Bago / Yangon</button>
+                <button class="chip" onclick="filterMapRegion('mandalay_sagaing')">Mandalay / Sagaing</button>
+                <button class="chip" onclick="filterMapRegion('delta')">Ayeyarwady Delta</button>
+                <button class="chip" onclick="filterMapRegion('shan')">Shan Plateau</button>
+                <button class="chip" onclick="filterMapRegion('rakhine')">Rakhine / Western</button>
+            </div>
+        </div>
+
+        <!-- Leaflet Map Container with Floating Grab Navigation HUD -->
+        <div class="map-frame" style="position: relative;">
             <div id="map"></div>
+
+            <!-- Grab-Style Turn-by-Turn Navigation HUD (Floating Overlay) -->
+            <div id="grab-nav-hud" class="grab-nav-hud hidden">
+                <div class="grab-nav-header">
+                    <div class="grab-nav-title-group">
+                        <div class="grab-nav-tag">
+                            <span class="pulse-dot"></span>
+                            <span>LIVE DISPATCH GUIDANCE</span>
+                        </div>
+                        <h3 id="grab-nav-dest-title" class="grab-nav-title">Disaster Destination</h3>
+                        <div class="grab-nav-meta">
+                            <span class="grab-badge grab-badge-depot" id="grab-nav-origin">Yangon Central Base</span>
+                            <span class="grab-arrow">➔</span>
+                            <span class="grab-badge grab-badge-eta" id="grab-nav-eta">--</span>
+                            <span class="grab-badge grab-badge-dist" id="grab-nav-dist">-- km</span>
+                        </div>
+                    </div>
+                    <button class="grab-nav-close" onclick="closeTurnByTurnNavigation()" title="Close Navigation">✕</button>
+                </div>
+
+                <!-- Multi-modal Mode Selector -->
+                <div class="grab-mode-selector">
+                    <button class="mode-btn active" id="btn-mode-land" onclick="switchRouteMode('land')">
+                        <span class="mode-icon">🚚</span>
+                        <span class="mode-text">Land Convoy</span>
+                    </button>
+                    <button class="mode-btn" id="btn-mode-air" onclick="switchRouteMode('air')">
+                        <span class="mode-icon">🚁</span>
+                        <span class="mode-text">Air Airlift</span>
+                    </button>
+                    <button class="mode-btn" id="btn-mode-water" onclick="switchRouteMode('water')">
+                        <span class="mode-icon">🚢</span>
+                        <span class="mode-text">Water Barge</span>
+                    </button>
+                </div>
+
+                <!-- Road Hazard Alert Banner -->
+                <div id="grab-hazard-banner" class="grab-hazard-banner">
+                    <span id="grab-hazard-text">Route calculated via primary transit corridor.</span>
+                </div>
+
+                <!-- Turn-by-Turn Step Timeline -->
+                <div class="grab-steps-container" id="grab-steps-list">
+                    <!-- Populated dynamically by App.js -->
+                </div>
+
+                <!-- Navigation Action Footer -->
+                <div class="grab-nav-footer">
+                    <button class="btn btn-primary grab-dispatch-btn" id="btn-start-dispatch" onclick="toggleVehicleSimulation()">
+                        <span id="dispatch-icon">▶</span>
+                        <span id="dispatch-label">Start Vehicle Simulation</span>
+                    </button>
+                    <div class="simulation-progress hidden" id="simulation-progress-bar">
+                        <div class="progress-fill" id="simulation-progress-fill"></div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -416,6 +490,6 @@
         crossorigin=""
     ></script>
     <!-- App Logic -->
-    <script src="App.js?v=20260818-minimal"></script>
+    <script src="App.js?v=20260818-grab-v1"></script>
 </body>
 </html>

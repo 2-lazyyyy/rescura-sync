@@ -1137,6 +1137,9 @@ async function fetchReliefData(lat = 17.3333, lon = 96.4833, severity = 7.5, tit
                     <div style="font-size: 12px; color: #475569;">⏱️ <b style="color: #1e293b;">Est. Ops Duration:</b> <span style="color: #7c3aed; font-weight: 800; font-family: monospace;">${estRescueTime} hours</span></div>
                     ${etaRowHtml}
                 </div>
+                <button onclick="startTurnByTurnNavigation(${lat}, ${lon}, '${encodeURIComponent(title)}', ${severity})" style="display: block; width: 100%; margin-bottom: 6px; text-align: center; background: linear-gradient(135deg, #059669, #10b981); color: #ffffff; border: none; padding: 8px 12px; border-radius: 8px; font-weight: 700; font-size: 12px; cursor: pointer; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.25);">
+                    🧭 Grab-Style Route Guidance (Turn-by-Turn)
+                </button>
                 <button onclick="downloadActionPlanPDF(${(existingEvt && existingEvt.id) ? existingEvt.id : 1})" style="display: block; width: 100%; margin-bottom: 8px; text-align: center; background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #ffffff; border: none; padding: 8px 12px; border-radius: 8px; font-weight: 700; font-size: 12px; cursor: pointer; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.25);">
                     📄 Download Action Plan (PDF)
                 </button>
@@ -2149,3 +2152,228 @@ function closeAnalyticsModal() {
     if (modal) modal.classList.add('hidden');
 }
 window.closeAnalyticsModal = closeAnalyticsModal;
+
+/* ==========================================================================
+   Myanmar Quick Incident Radar & Grab-Style Turn-by-Turn Navigation Engine
+   ========================================================================== */
+
+let currentNavRouteLayer = null;
+let currentSimVehicleMarker = null;
+let currentNavData = null;
+let currentNavParams = null;
+let simulationInterval = null;
+let simulationStepIndex = 0;
+
+window.filterMapRegion = function(regionKey) {
+    const bar = document.getElementById('myanmar-radar-bar');
+    if (bar) {
+        bar.querySelectorAll('.chip').forEach(btn => btn.classList.remove('active'));
+    }
+    const evt = window.event;
+    if (evt && evt.target) evt.target.classList.add('active');
+
+    const regionBounds = {
+        'all': { center: [19.0, 96.0], zoom: 5 },
+        'myanmar': { center: [19.75, 96.1], zoom: 6 },
+        'bago_yangon': { center: [17.1, 96.3], zoom: 8 },
+        'mandalay_sagaing': { center: [21.9, 95.9], zoom: 8 },
+        'delta': { center: [16.6, 95.1], zoom: 8 },
+        'shan': { center: [21.3, 97.4], zoom: 7 },
+        'rakhine': { center: [20.1, 93.3], zoom: 7 }
+    };
+
+    const target = regionBounds[regionKey] || regionBounds['myanmar'];
+    if (map) {
+        map.flyTo(target.center, target.zoom, { animate: true, duration: 1.2 });
+    }
+};
+
+window.startTurnByTurnNavigation = async function(lat, lon, title, severity) {
+    currentNavParams = {
+        lat: parseFloat(lat),
+        lon: parseFloat(lon),
+        title: decodeURIComponent(title || 'Disaster Epicenter'),
+        severity: parseFloat(severity || 5.0),
+        mode: 'land'
+    };
+    await fetchAndRenderNavigationRoute();
+};
+
+window.switchRouteMode = async function(mode) {
+    if (!currentNavParams) return;
+    currentNavParams.mode = mode;
+
+    ['land', 'air', 'water'].forEach(m => {
+        const btn = document.getElementById(`btn-mode-${m}`);
+        if (btn) btn.classList.toggle('active', m === mode);
+    });
+
+    await fetchAndRenderNavigationRoute();
+};
+
+async function fetchAndRenderNavigationRoute() {
+    if (!currentNavParams) return;
+    const { lat, lon, title, severity, mode } = currentNavParams;
+
+    const hud = document.getElementById('grab-nav-hud');
+    if (hud) {
+        hud.classList.remove('hidden');
+    }
+
+    try {
+        const res = await apiFetch(`/api/route-navigation?target_lat=${lat}&target_lon=${lon}&mode=${mode || 'land'}&severity=${severity || 5.0}&title=${encodeURIComponent(title || 'Disaster Epicenter')}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.status !== 'success' || !data.navigation) return;
+
+        currentNavData = data.navigation;
+        renderNavHUD(currentNavData);
+        drawNavigationPolyline(currentNavData);
+    } catch (err) {
+        console.error('Error fetching navigation route:', err);
+    }
+}
+
+function renderNavHUD(nav) {
+    const destTitle = document.getElementById('grab-nav-dest-title');
+    const originBadge = document.getElementById('grab-nav-origin');
+    const etaBadge = document.getElementById('grab-nav-eta');
+    const distBadge = document.getElementById('grab-nav-dist');
+    const hazardText = document.getElementById('grab-hazard-text');
+    const stepsContainer = document.getElementById('grab-steps-list');
+
+    if (destTitle) destTitle.textContent = nav.disaster_title || 'Disaster Epicenter';
+    if (originBadge) originBadge.textContent = nav.depot_name || 'Relief Depot';
+    if (etaBadge) etaBadge.textContent = `⏱️ ${nav.formatted_eta}`;
+    if (distBadge) distBadge.textContent = `📍 ${nav.total_distance_km} km`;
+    if (hazardText) hazardText.textContent = nav.hazard_warning || 'Route active via primary corridor.';
+
+    if (stepsContainer) {
+        stepsContainer.innerHTML = '';
+        (nav.steps || []).forEach((step) => {
+            const card = document.createElement('div');
+            card.className = 'grab-step-card';
+            card.innerHTML = `
+                <div class="step-icon-badge">${step.icon || '⬆️'}</div>
+                <div class="step-content">
+                    <div class="step-instruction">${step.instruction}</div>
+                    <div class="step-meta">
+                        <span>${step.road_name || ''}</span>
+                        <strong>${step.distance_km > 0 ? step.distance_km + ' km' : ''}</strong>
+                    </div>
+                </div>
+            `;
+            stepsContainer.appendChild(card);
+        });
+    }
+}
+
+function drawNavigationPolyline(nav) {
+    if (currentNavRouteLayer && map.hasLayer(currentNavRouteLayer)) {
+        map.removeLayer(currentNavRouteLayer);
+    }
+    if (currentSimVehicleMarker && map.hasLayer(currentSimVehicleMarker)) {
+        map.removeLayer(currentSimVehicleMarker);
+    }
+    stopVehicleSimulation();
+
+    const coords = nav.coordinates || [];
+    if (!coords.length) return;
+
+    let routeColor = '#2563eb';
+    let dashArray = null;
+    if (nav.mode === 'air') {
+        routeColor = '#9333ea';
+        dashArray = '8, 8';
+    } else if (nav.mode === 'water') {
+        routeColor = '#0284c7';
+        dashArray = '5, 5';
+    }
+
+    currentNavRouteLayer = L.polyline(coords, {
+        color: routeColor,
+        weight: 6,
+        opacity: 0.9,
+        dashArray: dashArray,
+        lineCap: 'round',
+        lineJoin: 'round'
+    }).addTo(map);
+
+    map.fitBounds(currentNavRouteLayer.getBounds(), { padding: [60, 60], maxZoom: 13 });
+}
+
+window.closeTurnByTurnNavigation = function() {
+    const hud = document.getElementById('grab-nav-hud');
+    if (hud) hud.classList.add('hidden');
+    if (currentNavRouteLayer && map.hasLayer(currentNavRouteLayer)) {
+        map.removeLayer(currentNavRouteLayer);
+    }
+    if (currentSimVehicleMarker && map.hasLayer(currentSimVehicleMarker)) {
+        map.removeLayer(currentSimVehicleMarker);
+    }
+    stopVehicleSimulation();
+};
+
+window.toggleVehicleSimulation = function() {
+    if (simulationInterval) {
+        stopVehicleSimulation();
+    } else {
+        startVehicleSimulation();
+    }
+};
+
+function startVehicleSimulation() {
+    if (!currentNavData || !currentNavData.coordinates || currentNavData.coordinates.length < 2) return;
+    const coords = currentNavData.coordinates;
+
+    const btnLabel = document.getElementById('dispatch-label');
+    const btnIcon = document.getElementById('dispatch-icon');
+    const progBar = document.getElementById('simulation-progress-bar');
+    const progFill = document.getElementById('simulation-progress-fill');
+
+    if (btnLabel) btnLabel.textContent = 'Pause Simulation';
+    if (btnIcon) btnIcon.textContent = '⏸';
+    if (progBar) progBar.classList.remove('hidden');
+
+    if (!currentSimVehicleMarker) {
+        const vIcon = L.divIcon({
+            className: 'vehicle-sim-marker',
+            html: `<div style="font-size: 24px; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3)); transform: scale(1.2);">${currentNavData.vehicle_icon || '🚚'}</div>`,
+            iconSize: [30, 30],
+            iconAnchor: [15, 15]
+        });
+        currentSimVehicleMarker = L.marker(coords[0], { icon: vIcon, zIndexOffset: 2000 }).addTo(map);
+        simulationStepIndex = 0;
+    }
+
+    simulationInterval = setInterval(() => {
+        simulationStepIndex++;
+        if (simulationStepIndex >= coords.length) {
+            simulationStepIndex = 0;
+        }
+
+        const currentPos = coords[simulationStepIndex];
+        currentSimVehicleMarker.setLatLng(currentPos);
+
+        const pct = Math.round((simulationStepIndex / (coords.length - 1)) * 100);
+        if (progFill) progFill.style.width = `${pct}%`;
+
+        if (simulationStepIndex === coords.length - 1) {
+            stopVehicleSimulation();
+            if (btnLabel) btnLabel.textContent = '🏁 Mission Arrived (Restart)';
+            if (btnIcon) btnIcon.textContent = '🔄';
+        }
+    }, 450);
+}
+
+function stopVehicleSimulation() {
+    if (simulationInterval) {
+        clearInterval(simulationInterval);
+        simulationInterval = null;
+    }
+    const btnLabel = document.getElementById('dispatch-label');
+    const btnIcon = document.getElementById('dispatch-icon');
+    if (btnLabel && btnLabel.textContent.includes('Pause')) btnLabel.textContent = 'Resume Simulation';
+    if (btnIcon && btnIcon.textContent === '⏸') btnIcon.textContent = '▶';
+}
+

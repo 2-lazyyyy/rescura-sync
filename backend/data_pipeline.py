@@ -7,7 +7,7 @@ import models
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-async def ingest_mock_historical_data(db: AsyncSession) -> int:
+async def ingest_historical_disaster_data(db: AsyncSession) -> int:
     """
     Ingests and cleans real-world historical disaster data for Myanmar from myanmar_historical_data.csv using Pandas,
     and persists records into the HistoricalDisaster database table.
@@ -48,4 +48,8 @@ async def ingest_mock_historical_data(db: AsyncSession) -> int:
     await db.commit()
 
     return len(records_to_insert)
+
+
+# Backward compatibility alias
+ingest_mock_historical_data = ingest_historical_disaster_data
 

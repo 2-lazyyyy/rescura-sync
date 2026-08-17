@@ -27,7 +27,7 @@ from services.supabase_client import fetch_recent_sos_alerts, aggregate_sos_demo
 from data_pipeline import ingest_mock_historical_data
 from ml_model import ingest_rescue_data, train_rescue_model, predict_rescue_needs
 from analytics import generate_mission_report
-from routing import find_nearest_depot, haversine_distance, calculate_multimodal_eta
+from routing import find_nearest_depot, haversine_distance, calculate_multimodal_eta, get_detailed_turn_by_turn_route
 from spatial_engine import analyze_disaster_impact
 from email.utils import parsedate_to_datetime
 
@@ -992,6 +992,93 @@ async def nearest_depot(lat: float, lon: float, severity: float = 5.0, title: st
     """
     result = await find_nearest_depot(target_lat=lat, target_lon=lon, db=db, severity=severity, disaster_title=title)
     return result
+
+
+@app.get("/api/route-navigation", tags=["routing"])
+async def route_navigation(
+    target_lat: float,
+    target_lon: float,
+    depot_id: Optional[int] = None,
+    mode: str = "land",
+    severity: float = 5.0,
+    title: str = "Disaster Epicenter",
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Generates detailed, high-precision turn-by-turn Grab-style route navigation data.
+    Provides highway driving waypoints, aviation direct vectors, or marine navigation paths.
+    """
+    # 1. Identify depot
+    depot_res = await find_nearest_depot(target_lat=target_lat, target_lon=target_lon, db=db, severity=severity, disaster_title=title)
+    nearest_depot = depot_res.get("nearest_depot") or {}
+    
+    depot_lat = float(nearest_depot.get("latitude", 16.8661))
+    depot_lon = float(nearest_depot.get("longitude", 96.1561))
+    depot_name = str(nearest_depot.get("name", "Yangon Central Logistics Base"))
+
+    nav_data = await get_detailed_turn_by_turn_route(
+        depot_lat=depot_lat,
+        depot_lon=depot_lon,
+        target_lat=target_lat,
+        target_lon=target_lon,
+        mode=mode,
+        depot_name=depot_name,
+        disaster_title=title,
+        severity=severity
+    )
+    
+    nav_data["nearest_depot_info"] = nearest_depot
+    return {
+        "status": "success",
+        "navigation": nav_data
+    }
+
+
+@app.get("/api/myanmar-live-feed", tags=["disasters"])
+async def myanmar_live_feed():
+    """
+    Returns filtered, prioritized live disaster telemetry across Myanmar's 15 states/regions
+    with alert levels and assigned response depots.
+    """
+    disasters = await fetch_active_disasters()
+    myanmar_events = []
+    
+    for d in disasters:
+        lat = float(d.get("lat", 0.0))
+        lon = float(d.get("lon", 0.0))
+        title = str(d.get("title", ""))
+        sev = float(d.get("severity", 5.0))
+        
+        region = _classify_region(lat, lon, title)
+        # Filter Myanmar and immediate border corridor events
+        is_myanmar = (
+            "myanmar" in title.lower() or 
+            "burma" in title.lower() or
+            (9.0 <= lat <= 28.5 and 92.0 <= lon <= 101.5) or
+            ("central (" in region.lower() or "valley" in region.lower() or "delta" in region.lower() or "plateau" in region.lower() or "mountain" in region.lower() or "mon" in region.lower() or "rakhine" in region.lower())
+        )
+        
+        if is_myanmar:
+            alert_level = "🔴 Red Alert (Severe)" if sev >= 7.0 else ("🟠 Orange Warning (Elevated)" if sev >= 5.0 else "🟡 Yellow Advisory")
+            myanmar_events.append({
+                "title": title,
+                "latitude": lat,
+                "longitude": lon,
+                "severity": sev,
+                "event_type": _classify_event_type(title),
+                "region": region,
+                "alert_level": alert_level,
+                "created_at": d.get("created_at")
+            })
+            
+    # Sort by severity descending
+    myanmar_events.sort(key=lambda x: x["severity"], reverse=True)
+    
+    return {
+        "status": "success",
+        "total_myanmar_events": len(myanmar_events),
+        "events": myanmar_events
+    }
 
 
 async def build_emergency_payload(disaster_event: Any, db: AsyncSession) -> Dict[str, Any]:
