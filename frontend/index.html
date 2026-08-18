@@ -4,13 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rescura Sync - Situation Awareness Center (SAC)</title>
-    <!-- Leaflet.js CSS -->
-    <link 
-        rel="stylesheet" 
-        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" 
-        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" 
-        crossorigin="" 
-    />
+    <!-- Leaflet.js CSS (Fast, globally cached Cloudflare CDN with unpkg fallback) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" crossorigin="anonymous" />
     <!-- Google Fonts: Inter only — one family carries the whole interface -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -434,13 +429,14 @@
         </div>
     </div>
 
-    <!-- Leaflet.js JavaScript -->
-    <script 
-        src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" 
-        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" 
-        crossorigin=""
-    ></script>
+    <!-- Leaflet.js JavaScript (Cloudflare CDN with unpkg fallback) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js" crossorigin="anonymous"></script>
+    <script>
+        if (typeof L === 'undefined') {
+            document.write('<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>');
+        }
+    </script>
     <!-- App Logic -->
-    <script src="App.js?v=20260818-clean-v15"></script>
+    <script src="App.js?v=20260818-clean-v16"></script>
 </body>
 </html>

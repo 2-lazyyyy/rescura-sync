@@ -110,10 +110,10 @@ echo   Opening browser automatically...
 echo ============================================================
 echo.
 
-start "" "http://127.0.0.1:8000"
+start "" /b powershell -NoProfile -Command "Start-Sleep -Seconds 2; Start-Process 'http://127.0.0.1:8000'"
 
 cd backend
-python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+python -m uvicorn main:app --host 0.0.0.0 --port 8000
 
 echo.
 echo [INFO] Rescura Sync server has stopped.
