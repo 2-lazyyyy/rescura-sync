@@ -7,6 +7,7 @@ from typing import List, Dict, Any, Optional
 import httpx
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
+from services.myanmar_live_service import fetch_live_myanmar_disasters
 
 GDACS_RSS_URL = "https://www.gdacs.org/xml/rss.xml"
 GDACS_GEOJSON_URL = "https://www.gdacs.org/xml/gdacs.geojson"
@@ -15,227 +16,9 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CACHE_DIR = os.path.join(BASE_DIR, "cache")
 CACHE_FILE = os.path.join(CACHE_DIR, "gdacs_cache.json")
 
-# Verified real-world active Myanmar crisis corridors across all States & Regions
-MYANMAR_OPERATIONAL_DISASTERS: List[Dict[str, Any]] = [
-    {
-        "title": "Typhoon Yagi Remnants & Widespread Flood (Naypyidaw / Tatkon)",
-        "disaster_type": "Flood",
-        "lat": 20.1287,
-        "lon": 96.2167,
-        "severity": 8.8,
-        "country": "Myanmar",
-        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    },
-    {
-        "title": "Sagaing Fault Major Seismic Sequence (M7.7 Epicenter)",
-        "disaster_type": "Earthquake",
-        "lat": 21.8833,
-        "lon": 95.9667,
-        "severity": 8.9,
-        "country": "Myanmar",
-        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    },
-    {
-        "title": "Inle Lake Basin Severe Inundation (Nyaungshwe / Kalaw)",
-        "disaster_type": "Flood",
-        "lat": 20.5900,
-        "lon": 96.9200,
-        "severity": 8.3,
-        "country": "Myanmar",
-        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    },
-    {
-        "title": "Bago River Catastrophic Flash Inundation",
-        "disaster_type": "Flood",
-        "lat": 17.3333,
-        "lon": 96.4833,
-        "severity": 8.4,
-        "country": "Myanmar",
-        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    },
-    {
-        "title": "Hpakant Jade Mines Slopes & Debris Collapse",
-        "disaster_type": "Landslide",
-        "lat": 25.6100,
-        "lon": 96.3100,
-        "severity": 8.1,
-        "country": "Myanmar",
-        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    },
-    {
-        "title": "Sittwe & Northern Rakhine Cyclone Surge & River Flooding",
-        "disaster_type": "Cyclone",
-        "lat": 20.1400,
-        "lon": 92.8900,
-        "severity": 8.2,
-        "country": "Myanmar",
-        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    },
-    {
-        "title": "Kalay Valley & Chindwin River Severe Inundation",
-        "disaster_type": "Flood",
-        "lat": 23.1900,
-        "lon": 94.0500,
-        "severity": 7.8,
-        "country": "Myanmar",
-        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    },
-    {
-        "title": "Myitkyina & Ayeyarwady Headwaters Flood Crisis",
-        "disaster_type": "Flood",
-        "lat": 25.3833,
-        "lon": 97.3900,
-        "severity": 7.9,
-        "country": "Myanmar",
-        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    },
-    {
-        "title": "Taungoo & Sittaung River Mega-Overflow",
-        "disaster_type": "Flood",
-        "lat": 18.9333,
-        "lon": 96.4333,
-        "severity": 7.6,
-        "country": "Myanmar",
-        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    },
-    {
-        "title": "Ayeyarwady Delta Coastal Surge & River Spill (Labutta / Bogale)",
-        "disaster_type": "Cyclone",
-        "lat": 16.0333,
-        "lon": 95.2167,
-        "severity": 7.7,
-        "country": "Myanmar",
-        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    },
-    {
-        "title": "Southern Mon Coastal Inundation & Mudslides (Mawlamyine / Kyaikmaraw)",
-        "disaster_type": "Flood",
-        "lat": 16.4900,
-        "lon": 97.6300,
-        "severity": 7.5,
-        "country": "Myanmar",
-        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    },
-    {
-        "title": "Mandalay Urban Inundation & Drainage Crisis (Amarapura / Patheingyi)",
-        "disaster_type": "Flood",
-        "lat": 21.9750,
-        "lon": 96.0833,
-        "severity": 7.2,
-        "country": "Myanmar",
-        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    },
-    {
-        "title": "Shan Eastern Highlands Landslide & Runoff (Taunggyi / Hopong)",
-        "disaster_type": "Landslide",
-        "lat": 20.7833,
-        "lon": 97.0333,
-        "severity": 7.4,
-        "country": "Myanmar",
-        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    },
-    {
-        "title": "Kayin State Thanlwin River Overflow (Hpa-an / Myawaddy)",
-        "disaster_type": "Flood",
-        "lat": 16.8900,
-        "lon": 97.6300,
-        "severity": 7.5,
-        "country": "Myanmar",
-        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    },
-    {
-        "title": "Kayah State Bilu Chaung Flood Crisis (Loikaw / Demoso)",
-        "disaster_type": "Flood",
-        "lat": 19.6700,
-        "lon": 97.2100,
-        "severity": 7.6,
-        "country": "Myanmar",
-        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    },
-    {
-        "title": "Chin State Mountain Landslides & Highway Blockades (Hakha / Falam)",
-        "disaster_type": "Landslide",
-        "lat": 22.6400,
-        "lon": 93.6100,
-        "severity": 7.5,
-        "country": "Myanmar",
-        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    },
-    {
-        "title": "Tachileik & Eastern Border Flash Inundation (Tachileik / Kengtung)",
-        "disaster_type": "Flood",
-        "lat": 20.4400,
-        "lon": 99.8800,
-        "severity": 7.7,
-        "country": "Myanmar",
-        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    },
-    {
-        "title": "Tanintharyi River Severe Flash Inundation (Myeik / Dawei)",
-        "disaster_type": "Flood",
-        "lat": 12.4400,
-        "lon": 98.6000,
-        "severity": 7.3,
-        "country": "Myanmar",
-        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    },
-    {
-        "title": "Chauk & Central Magway Seismic Tremors (M5.6)",
-        "disaster_type": "Earthquake",
-        "lat": 20.8800,
-        "lon": 94.8200,
-        "severity": 7.0,
-        "country": "Myanmar",
-        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    },
-    {
-        "title": "Pyin Oo Lwin Highland Torrential Runoff & Mudflows",
-        "disaster_type": "Landslide",
-        "lat": 22.0333,
-        "lon": 96.4667,
-        "severity": 7.1,
-        "country": "Myanmar",
-        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    },
-    {
-        "title": "Thabeikkyin Seismic Fault Emergency (M6.8)",
-        "disaster_type": "Earthquake",
-        "lat": 22.8833,
-        "lon": 95.9833,
-        "severity": 7.8,
-        "country": "Myanmar",
-        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    },
-    {
-        "title": "Yangon Industrial Lowlands Flash Flood & Surge (Hlaingtharya / Twante)",
-        "disaster_type": "Flood",
-        "lat": 16.8622,
-        "lon": 96.0667,
-        "severity": 6.8,
-        "country": "Myanmar",
-        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    },
-    {
-        "title": "Pyapon Coastal Mangrove Storm Surge Warning",
-        "disaster_type": "Cyclone",
-        "lat": 16.2900,
-        "lon": 95.6800,
-        "severity": 7.3,
-        "country": "Myanmar",
-        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    },
-    {
-        "title": "Pakokku & Lower Chindwin Riverbank Erosion Crisis",
-        "disaster_type": "Flood",
-        "lat": 21.3300,
-        "lon": 95.0800,
-        "severity": 6.9,
-        "country": "Myanmar",
-        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    }
-]
-
-INITIAL_FALLBACK_DISASTERS = MYANMAR_OPERATIONAL_DISASTERS
+# Live real-time operations only - historical mock list removed
+MYANMAR_OPERATIONAL_DISASTERS: List[Dict[str, Any]] = []
+INITIAL_FALLBACK_DISASTERS: List[Dict[str, Any]] = []
 
 
 def parse_gdacs_pubdate(pub_date_str: str) -> str:
@@ -422,30 +205,39 @@ async def _fetch_from_remote_gdacs() -> List[Dict[str, Any]]:
         except Exception as e:
             print(f"Notice: GDACS GeoJSON fallback notice: {e}")
 
-    if disasters:
-        # Prioritize verified active Myanmar operational emergencies first, then ASEAN & global events
-        gdacs_myanmar_events = [
-            d for d in disasters
-            if (9.0 <= d["lat"] <= 29.0 and 92.0 <= d["lon"] <= 102.0) or d.get("country", "").lower() in ["myanmar", "burma"]
-        ]
+    # 3. Fetch real-time live Myanmar events from USGS Seismological Catalog & Open-Meteo GloFAS
+    live_myanmar_events: List[Dict[str, Any]] = []
+    try:
+        live_myanmar_events = await fetch_live_myanmar_disasters()
+    except Exception as e:
+        print(f"Notice: Live Myanmar event fetch error: {e}")
 
-        myanmar_keys = {f"{round(float(d['lat']), 2)}_{round(float(d['lon']), 2)}" for d in gdacs_myanmar_events}
-        curated_myanmar = [
-            m for m in MYANMAR_OPERATIONAL_DISASTERS 
-            if f"{round(float(m['lat']), 2)}_{round(float(m['lon']), 2)}" not in myanmar_keys
-        ]
-        all_myanmar = curated_myanmar + gdacs_myanmar_events
+    # Prioritize 100% live real-time Myanmar events
+    gdacs_myanmar_events = [
+        d for d in disasters
+        if (9.0 <= d["lat"] <= 29.0 and 92.0 <= d["lon"] <= 102.0) or d.get("country", "").lower() in ["myanmar", "burma"]
+    ]
 
-        se_asia_events = [
-            d for d in disasters
-            if (0.0 <= d["lat"] <= 30.0 and 85.0 <= d["lon"] <= 115.0) and d not in gdacs_myanmar_events
-        ]
-        other_events = [d for d in disasters if d not in gdacs_myanmar_events and d not in se_asia_events]
+    # Combine live Myanmar sources with deduplication by lat/lon
+    seen_myanmar_coords = {f"{round(float(d['lat']), 2)}_{round(float(d['lon']), 2)}" for d in live_myanmar_events}
+    for gm in gdacs_myanmar_events:
+        key = f"{round(float(gm['lat']), 2)}_{round(float(gm['lon']), 2)}"
+        if key not in seen_myanmar_coords:
+            live_myanmar_events.append(gm)
+            seen_myanmar_coords.add(key)
 
-        sorted_results = all_myanmar + se_asia_events + other_events
-        return sorted_results
+    # Fallback to curated operational disasters only if no live events are available at all
+    if not live_myanmar_events:
+        live_myanmar_events = list(MYANMAR_OPERATIONAL_DISASTERS)
 
-    return list(MYANMAR_OPERATIONAL_DISASTERS)
+    se_asia_events = [
+        d for d in disasters
+        if (0.0 <= d["lat"] <= 30.0 and 85.0 <= d["lon"] <= 115.0) and d not in gdacs_myanmar_events
+    ]
+    other_events = [d for d in disasters if d not in gdacs_myanmar_events and d not in se_asia_events]
+
+    sorted_results = live_myanmar_events + se_asia_events + other_events
+    return sorted_results
 
 
 async def _refresh_gdacs_background():
@@ -480,20 +272,26 @@ async def fetch_active_disasters() -> List[Dict[str, Any]]:
         disk_data = _load_disk_cache()
         if disk_data:
             _gdacs_cache = disk_data
-            _last_fetch_time = now - 60  # Mark slightly aged to trigger background refresh soon
+            _last_fetch_time = now - 60
         else:
-            _gdacs_cache = list(INITIAL_FALLBACK_DISASTERS)
-            _last_fetch_time = 0.0
+            try:
+                fresh = await _fetch_from_remote_gdacs()
+                if fresh:
+                    _gdacs_cache = fresh
+                    _last_fetch_time = now
+                    _save_disk_cache(fresh)
+            except Exception as e:
+                print(f"[GDACS Cache] Initial fetch note: {e}")
+                _gdacs_cache = list(INITIAL_FALLBACK_DISASTERS)
+                _last_fetch_time = 0.0
 
     # 2. Check if cache is stale (>300 seconds); trigger non-blocking background refresh
     if now - _last_fetch_time >= 300:
-        # Schedule background update task without awaiting
         try:
             loop = asyncio.get_running_loop()
             loop.create_task(_refresh_gdacs_background())
         except RuntimeError:
             pass
 
-    # 3. Return cache INSTANTLY (0 ms latency)
     return _gdacs_cache
 
