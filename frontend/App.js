@@ -2096,7 +2096,6 @@ function calculateClientETABreakdown(distKm, severity, title, lat = 0, lon = 0) 
  * Populates and displays the high-priority emergency modal popup for events in Myanmar & ASEAN
  */
 function displayEmergencyModal(payload) {
-    return; // TEMP: emergency popup disabled
     if (!payload || !payload.latitude || !payload.longitude) return;
 
     const processedIds = getProcessedEmergencyIds();

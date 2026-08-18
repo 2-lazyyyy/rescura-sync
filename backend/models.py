@@ -106,3 +106,22 @@ class RescueDepot(Base):
     water_inventory: Mapped[float] = mapped_column(Float, default=50000.0)
     food_inventory: Mapped[float] = mapped_column(Float, default=25000.0)
     created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+class MissionFeedback(Base):
+    __tablename__ = "mission_feedback"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    event_title: Mapped[str] = mapped_column(String(255), index=True)
+    severity: Mapped[float] = mapped_column(Float)
+    latitude: Mapped[float] = mapped_column(Float)
+    longitude: Mapped[float] = mapped_column(Float)
+    event_type: Mapped[str] = mapped_column(String(100), default="Flood")
+    terrain: Mapped[str] = mapped_column(String(100), default="Inland_Plain")
+    
+    # Actual Ground Truth Data (For MLOps)
+    actual_rescue_time_hours: Mapped[float] = mapped_column(Float)
+    actual_water_liters: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    actual_food_packs: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    
+    submitted_by: Mapped[str] = mapped_column(String(100), default="Control Room Admin")
+    created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), server_default=func.now())

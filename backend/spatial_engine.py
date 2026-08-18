@@ -2,16 +2,14 @@ import math
 import os
 from typing import Dict, Any
 import pandas as pd
+import numpy as np
+from ml_model import predict_rescue_needs
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DEMOGRAPHICS_CSV_PATH = os.path.join(BASE_DIR, "myanmar_demographics.csv")
 
 
 def calculate_haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """
-    Calculates the great-circle distance between two geographic coordinates in kilometers
-    using the Haversine formula.
-    """
     R = 6371.0  # Earth's radius in kilometers
 
     dlat = math.radians(lat2 - lat1)
@@ -36,12 +34,10 @@ def get_demographics_df() -> pd.DataFrame:
     return _demographics_df
 
 
-import numpy as np
-
-def analyze_disaster_impact(disaster_lat: float, disaster_lon: float, severity: float) -> Dict[str, Any]:
+def analyze_disaster_impact(disaster_lat: float, disaster_lon: float, severity: float, event_type: str = "Flood") -> Dict[str, Any]:
     """
     Analyzes disaster impact within a 50km radius using Myanmar demographic data.
-    Calculates affected population and required Sphere Project humanitarian supplies (water and food).
+    Uses ML Pipeline to predict vulnerability ratio, then applies UN Sphere Standard.
     """
     df = get_demographics_df()
 
@@ -62,10 +58,10 @@ def analyze_disaster_impact(disaster_lat: float, disaster_lon: float, severity: 
     mask = distances <= 50.0
     affected_df = df[mask]
     
-    total_affected_population = affected_df['population'].sum()
+    total_regional_population = int(affected_df['population'].sum())
 
     affected_cities = []
-    for idx, row in affected_df.head(10).iterrows(): # Just take top 10 to avoid huge payload
+    for idx, row in affected_df.head(10).iterrows(): 
         affected_cities.append({
             "city": str(row['city']),
             "latitude": float(row['latitude']),
@@ -74,15 +70,13 @@ def analyze_disaster_impact(disaster_lat: float, disaster_lon: float, severity: 
             "distance_km": float(round(distances[idx], 2))
         })
 
-    # If disaster is in rural/offshore zone (>50km from surveyed city hubs),
-    # compute realistic baseline population from nearest demographic anchor with distance decay
-    if total_affected_population == 0 and len(distances) > 0:
+    if total_regional_population == 0 and len(distances) > 0:
         min_idx = int(np.argmin(distances))
         nearest_row = df.iloc[min_idx]
         nearest_dist = float(distances[min_idx])
         decay = max(0.04, 1.0 / (1.0 + (nearest_dist / 60.0)))
         estimated_rural_pop = max(1500, int(nearest_row['population'] * 0.08 * decay * (severity / 5.0)))
-        total_affected_population = estimated_rural_pop
+        total_regional_population = estimated_rural_pop
         affected_cities.append({
             "city": f"{nearest_row['city']} Regional Sector",
             "latitude": float(nearest_row['latitude']),
@@ -91,36 +85,43 @@ def analyze_disaster_impact(disaster_lat: float, disaster_lon: float, severity: 
             "distance_km": round(nearest_dist, 2)
         })
 
-    # 4. Calculate supplies based on The Sphere Project standards
-    # Sphere Standards: 20 Liters of water per person, 3 Food packs per person
-    base_water_liters = total_affected_population * 20.0
-    base_food_packs = total_affected_population * 3.0
+    # ML Pipeline Integration
+    ml_prediction = predict_rescue_needs(
+        severity=severity,
+        total_population=total_regional_population,
+        lat=disaster_lat,
+        lon=disaster_lon,
+        event_type=event_type
+    )
 
-    # Scaling multiplier based on disaster severity (severity scale 1-10; 5.0 = baseline 1.0x multiplier)
-    severity_multiplier = max(1.0, float(severity) / 5.0)
+    total_water_liters = ml_prediction["water_liters"]
+    total_food_packs = ml_prediction["food_packs"]
+    vulnerable_population = ml_prediction["vulnerable_population"]
+    estimated_rescue_time = ml_prediction["estimated_rescue_time"]
+    ml_vulnerability_ratio = ml_prediction["ml_vulnerability_ratio"]
 
-    total_water_liters = round(base_water_liters * severity_multiplier, 1)
-    total_food_packs = round(base_food_packs * severity_multiplier, 1)
-
-    # 5. Financial Cost Engine: Unit costs ($0.50/L water, $3.50/pack food)
+    # Financial Cost Engine
     COST_PER_WATER_LITER = 0.50
     COST_PER_FOOD_PACK = 3.50
     total_estimated_budget_usd = round(
         (total_water_liters * COST_PER_WATER_LITER) + (total_food_packs * COST_PER_FOOD_PACK), 2
     )
 
-    # 6. Return structured dictionary
     return {
         "disaster_location": {
             "latitude": disaster_lat,
             "longitude": disaster_lon,
-            "severity": severity
+            "severity": severity,
+            "event_type": event_type
         },
         "affected_cities": affected_cities,
-        "total_affected_population": int(total_affected_population),
+        "total_regional_population": total_regional_population,
+        "vulnerable_population": vulnerable_population,
+        "ml_vulnerability_ratio": ml_vulnerability_ratio,
         "total_water_liters": total_water_liters,
         "total_food_packs": total_food_packs,
-        "total_estimated_budget_usd": total_estimated_budget_usd
+        "estimated_rescue_time_hours": estimated_rescue_time,
+        "total_estimated_budget_usd": total_estimated_budget_usd,
+        "nearest_depot": ml_prediction["nearest_depot_name"],
+        "dispatch_travel_hours": ml_prediction["dispatch_travel_hours"]
     }
-
-
