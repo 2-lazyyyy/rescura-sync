@@ -2374,10 +2374,10 @@ const DATASET_METADATA = {
         desc: 'Verified warehouse inventory capacities across Myanmar\'s 3 strategic logistics hubs (Yangon, Naypyidaw, Mandalay) with Highway 1 road routing.'
     },
     'myanmar_historical_data.csv': {
-        name: 'Historical Machine Learning Training Archive',
-        records: '1,664 Training Records',
-        citation: 'UN-OCHA, EM-DAT (CRED), USGS Earthquakes & Myanmar DDM',
-        desc: 'Historical crisis operations dataset used to train the Multi-Output Random Forest AI model.'
+        name: 'ASEAN & Myanmar Historical Training Archive',
+        records: '4,224 Regional Records',
+        citation: 'AHA Centre ADINet, UN-OCHA, EM-DAT (CRED), USGS & Myanmar DDM',
+        desc: 'Comprehensive multi-country ASEAN disaster dataset used to train the Multi-Output Random Forest AI model.'
     }
 };
 

@@ -77,7 +77,7 @@ Rescura Sync operates strictly on **5 verified, citable datasets**:
 | historical_disasters.csv        | AHA Centre ADINet, UN-OCHA ReliefWeb   | 100 Major Events        |
 | sphere_standards.csv            | The Sphere Project Humanitarian Charter| 6 Core Supply Standards |
 | relief_depots.csv               | National Logistics Registry            | 3 Strategic Bases       |
-| myanmar_historical_data.csv     | UN-OCHA, EM-DAT, USGS, DDM Myanmar     | 1,664 Op Records        |
+| myanmar_historical_data.csv     | AHA Centre, UN-OCHA, EM-DAT, USGS, DDM | 4,224 ASEAN Op Records  |
 +----------------------------------------------------------------------------------------------------+
 ```
 
@@ -107,8 +107,8 @@ Rescura Sync operates strictly on **5 verified, citable datasets**:
   3. **Mandalay Regional Forward Depot** ($21.9588^\circ\text{N}, 96.0891^\circ\text{E}$): Water Inventory $900,000\text{ L}$, Food $140,000\text{ packs}$.
 
 ### 3.5 `myanmar_historical_data.csv`
-- **Citation**: *Combined disaster operations records from EM-DAT (CRED), USGS Earthquakes, UN-OCHA, and Myanmar DDM*.
-- **Contents**: 1,664 machine learning training records linking spatial coordinates and severity to water, food, and rescue operation hours.
+- **Citation**: *AHA Centre ADINet, EM-DAT (CRED), USGS Earthquakes, UN-OCHA, and Myanmar DDM*.
+- **Contents**: 4,224 machine learning training records across all 10 ASEAN nations (Myanmar, Thailand, Philippines, Indonesia, Vietnam, Malaysia, Cambodia, Laos, Singapore, Brunei) linking spatial coordinates and severity to water, food, and rescue operation hours.
 
 ---
 
