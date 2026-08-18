@@ -99,6 +99,41 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"Warning during initial model training: {e}")
 
+    # Seed rescue depots into database on startup if empty
+    try:
+        async with AsyncSessionLocal() as db:
+            depot_stmt = select(models.RescueDepot)
+            depot_res = await db.execute(depot_stmt)
+            if not depot_res.scalars().first():
+                canonical_depots = [
+                    models.RescueDepot(
+                        name="Yangon Central Logistics Base",
+                        latitude=16.8661,
+                        longitude=96.1561,
+                        water_inventory=1200000.0,
+                        food_inventory=180000.0
+                    ),
+                    models.RescueDepot(
+                        name="Naypyidaw Strategic Reserve",
+                        latitude=19.7633,
+                        longitude=96.0785,
+                        water_inventory=1500000.0,
+                        food_inventory=250000.0
+                    ),
+                    models.RescueDepot(
+                        name="Mandalay Regional Depot",
+                        latitude=21.9588,
+                        longitude=96.0891,
+                        water_inventory=900000.0,
+                        food_inventory=140000.0
+                    )
+                ]
+                db.add_all(canonical_depots)
+                await db.commit()
+                print("[Startup Seeding] Database populated with canonical Rescue Depots.")
+    except Exception as depot_err:
+        print(f"Startup depot seeding notice: {depot_err}")
+
     # Seed active disaster events into database on startup if empty
     try:
         async with AsyncSessionLocal() as db:
@@ -118,6 +153,10 @@ async def lifespan(app: FastAPI):
                     db.add(evt)
                 await db.commit()
                 print(f"[Startup Seeding] Database populated with {len(disasters)} active disaster events.")
+            
+            # Pre-warm the dashboard data cache for instant initial response
+            await dashboard_data(db)
+            print(f"[Startup Cache] Pre-warmed live dashboard cache ({_dashboard_cache.get('count', 0)} events ready).")
     except Exception as seed_err:
         print(f"Startup seeding notice: {seed_err}")
 
@@ -537,15 +576,17 @@ async def dashboard_data(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
         if cached_depots:
             closest = min(cached_depots, key=lambda dp: haversine_distance(lat_val, lon_val, dp[2], dp[3]))
             dist = haversine_distance(lat_val, lon_val, closest[2], closest[3])
+            eta_breakdown = calculate_multimodal_eta(dist, severity=sev_val, disaster_title=title, lat=lat_val, lon=lon_val)
+            depot_name = eta_breakdown.get("assigned_depot_override") or closest[1]
             nearest_depot_info = {
                 "id": closest[0],
-                "name": closest[1],
+                "name": depot_name,
                 "latitude": closest[2],
                 "longitude": closest[3],
                 "water_inventory": closest[4],
                 "food_inventory": closest[5],
                 "distance_km": round(dist, 2),
-                "eta_breakdown": calculate_multimodal_eta(dist, severity=sev_val, disaster_title=title)
+                "eta_breakdown": eta_breakdown
             }
 
         dispatch_hours = round(nearest_depot_info["distance_km"] / 45.0, 1) if nearest_depot_info else 1.0
@@ -751,7 +792,7 @@ async def export_action_plan_pdf(
 
     # Multi-Modal ETAs
     cached_eta = (cached_evt.get("nearest_depot", {}).get("eta_breakdown", {}).get("modes", {})) if cached_evt else {}
-    multimodal = calculate_multimodal_eta(dist_km_val, severity=sev_val, disaster_title=evt_title)
+    multimodal = calculate_multimodal_eta(dist_km_val, severity=sev_val, disaster_title=evt_title, lat=lat_val, lon=lon_val)
     modes = multimodal.get("modes", {})
 
     land_eta_str = land_eta or cached_eta.get("land", {}).get("formatted_time") or modes.get("land", {}).get("formatted_time", f"{round((dist_km_val * 1.3 / 50.0) + 0.5, 1)}h")
@@ -1790,7 +1831,7 @@ async def get_transport_analytics(db: AsyncSession = Depends(get_db)):
                 min_dist = dist
                 best_depot = dp
 
-        eta_res = calculate_multimodal_eta(min_dist, severity=d_sev, disaster_title=d_title)
+        eta_res = calculate_multimodal_eta(min_dist, severity=d_sev, disaster_title=d_title, lat=d_lat, lon=d_lon)
         mode = eta_res.get("recommended_mode", "land")
         if mode == "air":
             total_air += 1

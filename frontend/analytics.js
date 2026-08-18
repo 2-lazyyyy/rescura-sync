@@ -1,13 +1,26 @@
-let activeApiHost = sessionStorage.getItem('rescura_api_host') || 'http://127.0.0.1:8000';
+function getDefaultApiHost() {
+    if (typeof window !== 'undefined' && window.location) {
+        const origin = window.location.origin;
+        if (origin && origin.startsWith('http')) {
+            if (window.location.port && window.location.port !== '8000') {
+                return `${window.location.protocol}//${window.location.hostname}:8000`;
+            }
+            return origin;
+        }
+    }
+    return 'http://127.0.0.1:8000';
+}
+
+let activeApiHost = sessionStorage.getItem('rescura_api_host') || getDefaultApiHost();
 
 function getCandidateHosts() {
     const list = [];
+    const def = getDefaultApiHost();
+    if (def) list.push(def);
+    if (activeApiHost && activeApiHost !== def) list.push(activeApiHost);
     if (window.location && window.location.origin && window.location.origin.startsWith('http')) {
         list.push(window.location.origin);
         list.push(window.location.origin.replace(/:\d+$/, ':8000'));
-    }
-    if (activeApiHost) {
-        list.push(activeApiHost);
     }
     list.push('http://127.0.0.1:8000', 'http://localhost:8000');
     list.push('https://rescura-sync.onrender.com');
@@ -15,7 +28,7 @@ function getCandidateHosts() {
 }
 
 async function apiFetch(path, options = {}) {
-    const timeoutMs = options.timeout || 1500;
+    const timeoutMs = options.timeout || 3500;
     const fetchOptions = { ...options };
     delete fetchOptions.timeout;
 

@@ -1,7 +1,7 @@
-standard_domain,minimum_standard,metric_multiplier,unit,official_source,usage_in_rescura
-Water Supply (Core 2.1),Potable Survival Water,15.0,Litres/person/day,The Sphere Handbook (UN Sphere Core Standard 2.1),Multiplied by affected civilian population to compute total disaster water allocation
-Food Security (Core 3.1),Daily Emergency Food Ration,1.0 (2100 kcal),Packs/person/day,UN World Food Programme (WFP) & Sphere Standard 3.1,Multiplied by affected civilian population to compute emergency food rations
-Logistics Benchmark,Potable Water Transport Cost,0.45,USD/Litre,Inter-Agency Standing Committee (IASC) Logistics Benchmark,Applied to calculate total relief mission transport budget for water supplies
-Logistics Benchmark,Food Pack Dispatch Cost,3.20,USD/Pack,Inter-Agency Standing Committee (IASC) Logistics Benchmark,Applied to calculate total relief mission transport budget for food packs
-Road Logistics,Convoy Highway Speed,45.0,km/h,Myanmar Highway 1 Heavy Transport Standard,Calculates driving ETA from Yangon/Naypyidaw/Mandalay to crisis epicenters
-Staging Buffer,Depot Dispatch Prep Time,25.0,minutes,UN OCHA Virtual OSOCC Rapid Mobilization SOP,Staging overhead added to road transit time
+standard_name,value,unit,official_source,usage_in_project
+Daily Water Supply,20,Liters / Person / Day,The Sphere Handbook (Water Standard 2.1),Calculates total survival water required for affected population
+Emergency Food Rations,3,Packs / Person / Day,The Sphere Handbook (Food Standard 3.1),Calculates total emergency food packs required (2100 kcal/day)
+Medical Emergency Kits,1,Kit / 150 People,WHO Emergency Health Standard,Calculates total emergency medical trauma kits required
+Water Cost,0.45,USD / Liter,UN Logistics Benchmark,Calculates estimated budget for water supply
+Food Pack Cost,3.20,USD / Pack,UN Logistics Benchmark,Calculates estimated budget for food supply
+Medical Kit Cost,45.00,USD / Kit,WHO Health Supply Benchmark,Calculates estimated budget for medical kits

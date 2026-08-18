@@ -150,6 +150,9 @@
         function downloadActionPlanPDF(evtId = 1) {
             window.open(`${API_HOST}/api/export-report/${evtId}`, '_blank');
         }
+        function openRawDataModal() {
+            window.location.href = 'index.html?open=datasets';
+        }
         function syncData() {
             window.location.href = 'index.html';
         }
