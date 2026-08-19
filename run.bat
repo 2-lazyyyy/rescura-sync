@@ -39,10 +39,9 @@ echo.
 echo [*] Checking and configuring database credentials...
 
 if not exist "backend\.env" (
-    echo [CREATE] Writing backend\.env with default database and Supabase credentials...
+    echo [CREATE] Writing backend\.env with default database credentials...
     (
         echo DATABASE_URL=sqlite+aiosqlite:///./rescura_sync.db
-        echo SUPABASE_URL=https://jgbtudbialgitdxgkngj.supabase.co
     ) > "backend\.env"
 ) else (
     echo [OK] backend\.env found.
@@ -61,15 +60,6 @@ if not exist ".env" (
     echo [OK] root .env found.
 )
 
-if exist "rescura-mobile" (
-    if not exist "rescura-mobile\.env" (
-        echo [CREATE] Writing rescura-mobile\.env with Supabase client keys...
-        (
-            echo EXPO_PUBLIC_SUPABASE_URL=https://jgbtudbialgitdxgkngj.supabase.co
-            echo EXPO_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpnYnR1ZGJpYWxnaXRkeGdrbmdqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwNjgzODksImV4cCI6MjEwMTY0NDM4OX0.1Wc1P4seagQsTKcOKN9nhDDiakBIAnQo7FlHhJBUO8A
-        ) > "rescura-mobile\.env"
-    )
-)
 
 :: 3. Setup Python Virtual Environment
 echo.

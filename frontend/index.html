@@ -13,8 +13,6 @@
     <!-- Global CSS Stylesheet -->
     <link rel="stylesheet" href="style.css?v=20260818-clean-v5">
 
-    <!-- Supabase JS CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -429,6 +427,78 @@
         </div>
     </div>
 
+    <!-- Disaster Dispatch Modal -->
+    <div id="modal-disaster-dispatch" class="modal-overlay hidden" onclick="if(event.target===this) closeDisasterDispatchModal()">
+        <div class="modal-card" style="max-width: 520px;">
+            <div class="modal-head">
+                <div>
+                    <h3 id="disp-modal-title">Dispatch relief supplies</h3>
+                    <p id="disp-modal-subtitle" class="modal-sub">Deploy supplies from a strategic hub to the disaster zone</p>
+                </div>
+                <button type="button" class="btn-close" onclick="closeDisasterDispatchModal()">&times;</button>
+            </div>
+
+            <form id="form-disaster-dispatch" onsubmit="handleDisasterDispatchSubmit(event)">
+                <input type="hidden" id="disp-disaster-id">
+                <input type="hidden" id="disp-disaster-title">
+                <input type="hidden" id="disp-disaster-lat">
+                <input type="hidden" id="disp-disaster-lon">
+                <input type="hidden" id="disp-disaster-sev">
+                <input type="hidden" id="disp-hub-id" value="1">
+
+                <div class="modal-body">
+                    <!-- Disaster Target Summary Card -->
+                    <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px 14px;">
+                        <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:#64748b; margin-bottom:4px;">Target Disaster Zone</div>
+                        <div id="disp-target-name" style="font-size:14px; font-weight:600; color:#0f172a; margin-bottom:6px;">--</div>
+                        <div id="disp-target-meta" style="font-size:12px; color:#475569; display:flex; justify-content:space-between;">
+                            <span>Severity: <strong id="disp-target-sev">--</strong></span>
+                            <span>Water needed: <strong id="disp-target-water">--</strong></span>
+                            <span>Food needed: <strong id="disp-target-food">--</strong></span>
+                        </div>
+                    </div>
+
+                    <!-- Assigned Source Logistics Hub Card (Auto-Assigned based on shortest distance) -->
+                    <div style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; padding:12px 14px;">
+                        <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:#0369a1; margin-bottom:4px;">Assigned Source Logistics Base (Proximity Route)</div>
+                        <div id="disp-assigned-hub-name" style="font-size:14px; font-weight:700; color:#0c4a6e; margin-bottom:4px;">--</div>
+                        <div id="disp-assigned-hub-stock" style="font-size:11.5px; color:#0369a1;">Available stock: Loading...</div>
+                    </div>
+
+                    <!-- Quantities (3 Core items) -->
+                    <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:10px;">
+                        <div class="field">
+                            <label class="field-label" for="disp-qty-water">Water (L)</label>
+                            <input type="number" id="disp-qty-water" class="input" min="0" step="1000" placeholder="0" required>
+                            <span id="disp-hint-water" style="font-size:10px; color:#64748b; display:block; margin-top:2px;">Max stock: --</span>
+                        </div>
+                        <div class="field">
+                            <label class="field-label" for="disp-qty-food">Food (packs)</label>
+                            <input type="number" id="disp-qty-food" class="input" min="0" step="100" placeholder="0" required>
+                            <span id="disp-hint-food" style="font-size:10px; color:#64748b; display:block; margin-top:2px;">Max stock: --</span>
+                        </div>
+                        <div class="field">
+                            <label class="field-label" for="disp-qty-medical">Medical (kits)</label>
+                            <input type="number" id="disp-qty-medical" class="input" min="0" step="10" placeholder="0" required>
+                            <span id="disp-hint-medical" style="font-size:10px; color:#64748b; display:block; margin-top:2px;">Max stock: --</span>
+                        </div>
+                    </div>
+
+                    <!-- Notes -->
+                    <div class="field">
+                        <label class="field-label" for="disp-notes">Mission instructions / Route notes (optional)</label>
+                        <textarea id="disp-notes" class="input" rows="2" placeholder="e.g. Priority convoy dispatch via Highway 1 corridor..."></textarea>
+                    </div>
+                </div>
+
+                <div class="modal-foot">
+                    <button type="button" class="btn" onclick="closeDisasterDispatchModal()">Cancel</button>
+                    <button type="submit" id="btn-disp-submit" class="btn btn-primary">Confirm &amp; dispatch supplies</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Leaflet.js JavaScript (Cloudflare CDN with unpkg fallback) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js" crossorigin="anonymous"></script>
     <script>
@@ -437,6 +507,6 @@
         }
     </script>
     <!-- App Logic -->
-    <script src="App.js?v=20260818-clean-v16"></script>
+    <script src="App.js?v=20260819-clean-v20"></script>
 </body>
 </html>

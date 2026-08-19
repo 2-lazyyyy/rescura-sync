@@ -19,11 +19,15 @@ from sqlalchemy import text, select
 from sqlalchemy.orm import selectinload
 
 import models
-from database import Base, engine, get_db, AsyncSessionLocal
+import database as _db_module
+from database import Base, engine, get_db
+
+def _get_session_local():
+    """Returns the current AsyncSessionLocal (may be SQLite fallback after startup)."""
+    return _db_module.AsyncSessionLocal
 from services.gis_analyzer import get_evacuation_routes
 from services.ai_predictor import ReliefPredictor
 from services.gdacs_client import fetch_active_disasters
-from services.supabase_client import fetch_recent_sos_alerts, aggregate_sos_demographics
 from data_pipeline import ingest_mock_historical_data
 from ml_model import train_rescue_model, predict_rescue_needs
 from analytics import generate_mission_report
@@ -101,7 +105,7 @@ async def lifespan(app: FastAPI):
 
     # Seed rescue depots into database on startup if empty
     try:
-        async with AsyncSessionLocal() as db:
+        async with _get_session_local()() as db:
             depot_stmt = select(models.RescueDepot)
             depot_res = await db.execute(depot_stmt)
             if not depot_res.scalars().first():
@@ -136,7 +140,7 @@ async def lifespan(app: FastAPI):
 
     # Seed active disaster events into database on startup if empty
     try:
-        async with AsyncSessionLocal() as db:
+        async with _get_session_local()() as db:
             stmt = select(models.DisasterEvent)
             res = await db.execute(stmt)
             if not res.scalars().first():
@@ -254,20 +258,6 @@ async def websocket_dispatch(websocket: WebSocket):
                 })
 
             elif action == "dispatch_supplies":
-                # Mark as dispatched in database if valid ID
-                try:
-                    async with AsyncSessionLocal() as db:
-                        if disaster_id.isdigit():
-                            d_id = int(disaster_id)
-                            sos_stmt = select(models.SOSAlert).where(models.SOSAlert.id == d_id)
-                            res = await db.execute(sos_stmt)
-                            sos_item = res.scalar_one_or_none()
-                            if sos_item:
-                                setattr(sos_item, "status", "dispatched")
-                                await db.commit()
-                except Exception as db_err:
-                    print(f"Notice during dispatch database update: {db_err}")
-
                 # Unlock disaster upon dispatch completion
                 manager.unlock_disaster(disaster_id)
 
@@ -400,21 +390,6 @@ async def live_alerts(db: AsyncSession = Depends(get_db)):
     }
 
 
-@app.get("/api/sos-alerts", tags=["sos"])
-async def sos_alerts():
-    """
-    Fetches recent mobile SOS emergency alerts from Supabase.
-    """
-    alerts = await fetch_recent_sos_alerts()
-    metrics = aggregate_sos_demographics(alerts)
-    return {
-        "status": "success",
-        "count": len(alerts),
-        "alerts": alerts,
-        "metrics": metrics
-    }
-
-
 @app.get("/api/predict-relief", tags=["relief"])
 async def predict_relief(
     lat: Optional[float] = None,
@@ -468,9 +443,6 @@ async def predict_relief(
     f_packs = round(spatial.get("total_food_packs", severity * 4000))
     affected_pop = spatial.get("affected_population", 5000)
 
-    raw_sos_alerts = await fetch_recent_sos_alerts()
-    sos_metrics = aggregate_sos_demographics(raw_sos_alerts)
-
     if is_within_asean(lat, lon):
         nearest_depot_data = await find_nearest_depot(target_lat=lat, target_lon=lon, db=db)
         nearest_depot_info = nearest_depot_data.get("nearest_depot", {})
@@ -510,14 +482,26 @@ async def predict_relief(
         "prediction_id": prediction_rec.id,
         "nearest_depot": nearest_depot_info,
         "gis_analysis": gis_data,
-        "ai_prediction": ai_data,
-        "sos_summary": sos_metrics
+        "ai_prediction": ai_data
     }
 
     if disaster_event:
         response["live_event"] = disaster_event
 
     return response
+
+    if disaster_event:
+        response["live_event"] = disaster_event
+
+    return response
+
+
+def get_disaster_identifier(title: str, lat: float, lon: float) -> str:
+    """Deterministic unique identifier for any disaster across external feed refreshes."""
+    clean_t = "".join(c for c in str(title).lower() if c.isalnum())[:25]
+    lat_r = round(float(lat), 2)
+    lon_r = round(float(lon), 2)
+    return f"{clean_t}_{lat_r}_{lon_r}"
 
 
 _dashboard_cache: Dict[str, Any] = {}
@@ -528,6 +512,7 @@ _dashboard_cache_time: float = 0.0
 async def dashboard_data(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
     """
     Returns up-to-date live disasters prioritizing Myanmar & regional emergencies with instant in-memory caching.
+    Merges persistent DisasterMission operational overlay (Dispatched / Resolved states & resource fulfillment).
     """
     global _dashboard_cache, _dashboard_cache_time
     import time
@@ -536,6 +521,13 @@ async def dashboard_data(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
         return _dashboard_cache
 
     disasters = await fetch_active_disasters()
+
+    # Load persistent disaster missions from database
+    missions_stmt = select(models.DisasterMission)
+    missions_res = await db.execute(missions_stmt)
+    all_missions: Dict[str, models.DisasterMission] = {
+        m.disaster_identifier: m for m in missions_res.scalars().all()
+    }
 
     depots_stmt = select(models.RescueDepot)
     depots_res = await db.execute(depots_stmt)
@@ -560,9 +552,13 @@ async def dashboard_data(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
         title = d.get("title", "Active Emergency Event")
         created_at_str = d.get("created_at") or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
+        d_identifier = get_disaster_identifier(title, lat_val, lon_val)
+        mission = all_missions.get(d_identifier)
+
         spatial = analyze_disaster_impact(lat_val, lon_val, sev_val)
         w_val = float(spatial.get("total_water_liters") or (sev_val * 15000.0))
         f_val = float(spatial.get("total_food_packs") or (sev_val * 4000.0))
+        med_target = max(50, int(round(sev_val * 60)))
         w_liters = round(w_val)
         f_packs = round(f_val)
         affected_pop = int(spatial.get("affected_population") or 5000)
@@ -594,12 +590,28 @@ async def dashboard_data(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
             "id": idx,
             "water_liters": w_liters,
             "food_packs": f_packs,
+            "medical_kits": med_target,
             "total_estimated_budget_usd": total_budget,
             "created_at": created_at_str
         }
 
+        m_status = mission.status if mission else "Active"
+        m_hub_id = mission.assigned_hub_id if mission else None
+        m_hub_name = mission.assigned_hub_name if mission else (nearest_depot_info["name"] if nearest_depot_info else "Central Base")
+        m_water = float(mission.dispatched_water_liters) if mission else 0.0
+        m_food = float(mission.dispatched_food_packs) if mission else 0.0
+        m_med = int(mission.dispatched_medical_kits) if mission else 0
+        m_dispatched_at = mission.dispatched_at.strftime("%Y-%m-%d %H:%M:%S") if (mission and mission.dispatched_at) else None
+        m_resolved_at = mission.resolved_at.strftime("%Y-%m-%d %H:%M:%S") if (mission and mission.resolved_at) else None
+
+        remaining_water = max(0.0, float(w_liters) - m_water)
+        remaining_food = max(0.0, float(f_packs) - m_food)
+        remaining_med = max(0, int(med_target) - m_med)
+        fulfillment_pct = min(100, round((m_water / max(1.0, float(w_liters))) * 100)) if w_liters > 0 else 100
+
         payload.append({
             "id": idx,
+            "disaster_identifier": d_identifier,
             "title": title,
             "disaster_type": d.get("disaster_type", "Flood"),
             "latitude": lat_val,
@@ -611,7 +623,24 @@ async def dashboard_data(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
             "latest_prediction": latest_pred,
             "estimated_rescue_time": total_rescue_time,
             "total_estimated_budget_usd": total_budget,
-            "nearest_depot": nearest_depot_info
+            "nearest_depot": nearest_depot_info,
+            "mission": {
+                "status": m_status,
+                "assigned_hub_id": m_hub_id,
+                "assigned_hub_name": m_hub_name,
+                "dispatched_water_liters": m_water,
+                "dispatched_food_packs": m_food,
+                "dispatched_medical_kits": m_med,
+                "target_water_liters": w_liters,
+                "target_food_packs": f_packs,
+                "target_medical_kits": med_target,
+                "remaining_water_liters": remaining_water,
+                "remaining_food_packs": remaining_food,
+                "remaining_medical_kits": remaining_med,
+                "fulfillment_pct": fulfillment_pct,
+                "dispatched_at": m_dispatched_at,
+                "resolved_at": m_resolved_at
+            }
         })
 
     res_data = {"status": "success", "count": len(payload), "dashboard_data": payload}
@@ -1271,15 +1300,6 @@ async def platform_analytics(db: AsyncSession = Depends(get_db)):
             if float(d.get("severity", 5.0)) <= 6.0:
                 daily_map[date_match]["resolved_evacuations"] = int(daily_map[date_match]["resolved_evacuations"]) + 1
 
-    total_inc = len(disasters)
-    day_keys = list(daily_map.keys())
-    for idx, day_str in enumerate(day_keys):
-        if int(daily_map[day_str]["new_incidents"]) == 0:
-            weight = [0.08, 0.12, 0.10, 0.18, 0.14, 0.22, 0.16][idx % 7]
-            dyn_count = max(2, int(total_inc * weight * 0.12))
-            daily_map[day_str]["new_incidents"] = dyn_count
-            daily_map[day_str]["resolved_evacuations"] = max(1, int(dyn_count * 0.82))
-
     daily_trends = list(daily_map.values())
 
     res_data = {
@@ -1583,72 +1603,1337 @@ async def get_regional_vulnerability():
     return {"status": "success", "count": len(results), "sectors": results}
 
 
-_depot_live_reserves: Dict[str, Dict[str, float]] = {
-    "Yangon Central Logistics Base": {
-        "curr_water": 1150000.0,
-        "curr_food": 165000.0,
-        "med_kits": 3400.0,
-        "max_water": 1200000.0,
-        "max_food": 180000.0,
-        "max_med": 3400.0,
-    },
-    "Naypyidaw Strategic Reserve": {
-        "curr_water": 1420000.0,
-        "curr_food": 235000.0,
-        "med_kits": 5100.0,
-        "max_water": 1500000.0,
-        "max_food": 250000.0,
-        "max_med": 5100.0,
-    },
-    "Mandalay Regional Depot": {
-        "curr_water": 820000.0,
-        "curr_food": 125000.0,
-        "med_kits": 2800.0,
-        "max_water": 900000.0,
-        "max_food": 140000.0,
-        "max_med": 2800.0,
-    }
-}
+# ==============================================================================
+# INVENTORY MANAGEMENT & SUPPLY CHAIN SCHEMAS AND CONTROLLERS
+# ==============================================================================
+
+class InventoryIntakeRequest(BaseModel):
+    hub_id: int
+    item_category: str = Field(..., description="water, food, medical, shelter, vehicles, boats")
+    quantity: float = Field(..., gt=0, description="Quantity received into warehouse")
+    source: str = Field("Aid Delivery", description="Donor, NGO, or supplier name")
+    reference_code: str = Field("", description="Waybill, PO, or shipment reference")
+    operator_name: str = Field("Warehouse Officer", description="Name of operator logging intake")
+    notes: Optional[str] = Field(None, description="Optional delivery notes")
+
+
+class InventoryIssueRequest(BaseModel):
+    hub_id: int
+    item_category: str = Field(..., description="water, food, medical, shelter, vehicles, boats")
+    quantity: float = Field(..., gt=0, description="Quantity dispatched out of warehouse")
+    destination: str = Field("Field Operation Zone", description="Target township, hospital, or mission zone")
+    reference_code: str = Field("", description="Requisition, mission, or voucher code")
+    operator_name: str = Field("Warehouse Officer", description="Name of operator logging issue")
+    notes: Optional[str] = Field(None, description="Optional dispatch notes")
+
+
+class InventoryAdjustRequest(BaseModel):
+    hub_id: int
+    item_category: str = Field(..., description="water, food, medical, shelter, vehicles, boats")
+    new_quantity: float = Field(..., ge=0, description="Exact counted physical quantity")
+    reason: str = Field("Physical count audit", description="Audit recount, damage write-off, or correction")
+    reference_code: str = Field("", description="Audit memo code")
+    operator_name: str = Field("Lead Auditor", description="Auditor or supervisor name")
+    notes: Optional[str] = Field(None, description="Detailed audit explanation")
+
+
+class InventoryTransferRequest(BaseModel):
+    source_hub_id: int = Field(..., description="ID of source hub with surplus supplies")
+    target_hub_id: int = Field(..., description="ID of target hub needing replenishment")
+    item_category: str = Field(..., description="water, food, medical, shelter")
+    quantity: float = Field(..., gt=0, description="Amount of supplies to transfer")
+    operator_name: str = Field("Logistics Coordinator", description="Operator authorising transfer")
+    notes: Optional[str] = Field(None, description="Optional transfer notes or convoy code")
+
+
+class DisasterDispatchRequest(BaseModel):
+    disaster_identifier: str = Field(..., description="Unique deterministic disaster hash string")
+    disaster_title: str = Field(..., description="Title of the disaster")
+    latitude: float
+    longitude: float
+    severity: float = 5.0
+    hub_id: int
+    water_liters: float = Field(0.0, ge=0)
+    food_packs: float = Field(0.0, ge=0)
+    medical_kits: int = Field(0, ge=0)
+    target_water_liters: float = Field(0.0, ge=0)
+    target_food_packs: float = Field(0.0, ge=0)
+    target_medical_kits: int = Field(0, ge=0)
+    notes: Optional[str] = None
+
+
+class DisasterResolveRequest(BaseModel):
+    disaster_identifier: str = Field(..., description="Unique disaster hash string")
+    notes: Optional[str] = None
 
 
 class RestockRequest(BaseModel):
     depot_name: Optional[str] = Field(None, description="Name of the depot to restock, or 'all'")
 
 
+async def _get_or_create_hub_records(db: AsyncSession) -> List[models.RescueDepot]:
+    """Helper to ensure canonical hubs exist with complete operational fields."""
+    stmt = select(models.RescueDepot).order_by(models.RescueDepot.id.asc())
+    res = await db.execute(stmt)
+    hubs = list(res.scalars().all())
+
+    if not hubs:
+        canonical = [
+            models.RescueDepot(
+                name="Yangon Central Logistics Base",
+                latitude=16.8661,
+                longitude=96.1561,
+                water_inventory=1150000.0,
+                water_capacity=1200000.0,
+                food_inventory=165000.0,
+                food_capacity=180000.0,
+                medical_kits=3400,
+                medical_capacity=3400,
+                shelter_packs=1500,
+                shelter_capacity=2000,
+                vehicles_count=18,
+                boats_count=8,
+                personnel_count=45,
+                average_daily_burn_water=18000.0,
+                average_daily_burn_food=3200.0,
+                lead_time_days=2.0,
+                organization_type="National Strategic Base",
+                status="Operational"
+            ),
+            models.RescueDepot(
+                name="Naypyidaw Strategic Reserve",
+                latitude=19.7633,
+                longitude=96.0785,
+                water_inventory=1420000.0,
+                water_capacity=1500000.0,
+                food_inventory=235000.0,
+                food_capacity=250000.0,
+                medical_kits=5100,
+                medical_capacity=5100,
+                shelter_packs=2200,
+                shelter_capacity=2500,
+                vehicles_count=24,
+                boats_count=4,
+                personnel_count=60,
+                average_daily_burn_water=22000.0,
+                average_daily_burn_food=4100.0,
+                lead_time_days=1.5,
+                organization_type="National Capital Strategic Stock",
+                status="Operational"
+            ),
+            models.RescueDepot(
+                name="Mandalay Regional Depot",
+                latitude=21.9588,
+                longitude=96.0891,
+                water_inventory=820000.0,
+                water_capacity=900000.0,
+                food_inventory=125000.0,
+                food_capacity=140000.0,
+                medical_kits=2800,
+                medical_capacity=2800,
+                shelter_packs=950,
+                shelter_capacity=1500,
+                vehicles_count=14,
+                boats_count=10,
+                personnel_count=35,
+                average_daily_burn_water=14000.0,
+                average_daily_burn_food=2600.0,
+                lead_time_days=2.5,
+                organization_type="Northern Regional Hub",
+                status="Operational"
+            )
+        ]
+        db.add_all(canonical)
+        await db.commit()
+
+        # Seed initial realistic transactions for audit trail
+        tx_samples = [
+            models.InventoryTransaction(
+                depot_id=1,
+                transaction_type="INBOUND",
+                item_category="water",
+                quantity_change=50000.0,
+                balance_after=1150000.0,
+                reference_code="WB-WFP-8921",
+                source_or_destination="UN-WFP Tanker Delivery",
+                operator_name="Yangon Receiving Bay",
+                notes="Standard purified bulk water shipment"
+            ),
+            models.InventoryTransaction(
+                depot_id=1,
+                transaction_type="OUTBOUND",
+                item_category="food",
+                quantity_change=-2500.0,
+                balance_after=165000.0,
+                reference_code="DISP-BAGO-01",
+                source_or_destination="Bago Flood Response Team 2",
+                operator_name="Field Dispatch Desk",
+                notes="High-energy emergency family food packs"
+            ),
+            models.InventoryTransaction(
+                depot_id=2,
+                transaction_type="INBOUND",
+                item_category="medical",
+                quantity_change=500.0,
+                balance_after=5100.0,
+                reference_code="MED-UNICEF-44",
+                source_or_destination="UNICEF Health Supply Center",
+                operator_name="Capital Medical Unit",
+                notes="Trauma and surgical first response kits"
+            ),
+            models.InventoryTransaction(
+                depot_id=3,
+                transaction_type="AUDIT",
+                item_category="shelter",
+                quantity_change=-50.0,
+                balance_after=950.0,
+                reference_code="AUDIT-2026-Q3",
+                source_or_destination="Physical warehouse inspection",
+                operator_name="Lead Inspector",
+                notes="Damaged tarpaulins written off after monsoon moisture inspection"
+            )
+        ]
+        db.add_all(tx_samples)
+        await db.commit()
+
+        stmt = select(models.RescueDepot).order_by(models.RescueDepot.id.asc())
+        res = await db.execute(stmt)
+        hubs = list(res.scalars().all())
+
+    return hubs
+
+
+@app.get("/api/inventory/hubs", tags=["inventory"])
+async def get_inventory_hubs(db: AsyncSession = Depends(get_db)):
+    """
+    Returns full inventory levels, maximum capacities, active daily burn rates,
+    days of supplies remaining, and Reorder Point (ROP) alert statuses for all hubs.
+    """
+    hubs = await _get_or_create_hub_records(db)
+    disasters = await fetch_active_disasters()
+
+    hub_data = []
+    for h in hubs:
+        # Calculate dynamic disaster demand burn rate based on proximity
+        disaster_demand_water = 0.0
+        disaster_demand_food = 0.0
+        assigned_crises = 0
+
+        for d in disasters:
+            d_lat = float(d.get("lat", 0.0))
+            d_lon = float(d.get("lon", 0.0))
+            dist = haversine_distance(float(h.latitude), float(h.longitude), d_lat, d_lon)
+            if dist < 350:
+                d_sev = float(d.get("severity", 5.0))
+                spatial = analyze_disaster_impact(d_lat, d_lon, d_sev)
+                total_w_req = float(spatial.get("total_water_liters") or (d_sev * 12000))
+                total_f_req = float(spatial.get("total_food_packs") or (d_sev * 2800))
+                # Active operational emergency drawdown (scaled per incident over 14-day cycle)
+                dist_weight = max(0.1, (350.0 - dist) / 350.0)
+                disaster_demand_water += (total_w_req / 14.0) * dist_weight * 0.04
+                disaster_demand_food += (total_f_req / 14.0) * dist_weight * 0.04
+                assigned_crises += 1
+
+        base_w = float(h.average_daily_burn_water or 18000.0)
+        base_f = float(h.average_daily_burn_food or 3200.0)
+        effective_daily_burn_water = max(1000.0, round(base_w + disaster_demand_water))
+        effective_daily_burn_food = max(200.0, round(base_f + disaster_demand_food))
+
+        curr_w = float(h.water_inventory or 0.0)
+        max_w = max(float(h.water_capacity or 1000000.0), curr_w, 1.0)
+        curr_f = float(h.food_inventory or 0.0)
+        max_f = max(float(h.food_capacity or 200000.0), curr_f, 1.0)
+        curr_med = int(h.medical_kits or 0)
+        max_med = max(int(h.medical_capacity or 3000), curr_med, 1)
+        curr_shelter = int(h.shelter_packs or 0)
+        max_shelter = max(int(h.shelter_capacity or 1500), curr_shelter, 1)
+
+        water_pct = min(100, int(round((curr_w / max_w) * 100)))
+        food_pct = min(100, int(round((curr_f / max_f) * 100)))
+        med_pct = min(100, int(round((curr_med / max_med) * 100)))
+        shelter_pct = min(100, int(round((curr_shelter / max_shelter) * 100)))
+
+        days_w = round(curr_w / effective_daily_burn_water, 1) if effective_daily_burn_water > 0 else 30.0
+        days_f = round(curr_f / effective_daily_burn_food, 1) if effective_daily_burn_food > 0 else 30.0
+        days_remaining = max(0, int(round(min(days_w, days_f))))
+
+        # Determine Reorder Point & Stock Health based on actual days runway & stock %
+        lead_time = float(h.lead_time_days or 2.0)
+        reorder_water_threshold = effective_daily_burn_water * lead_time * 2.0
+        reorder_food_threshold = effective_daily_burn_food * lead_time * 2.0
+
+        if days_remaining <= 3 or water_pct < 25 or food_pct < 25:
+            stock_status = "Low Stock"
+            status_tag = "tag-critical"
+        elif days_remaining <= 10 or water_pct < 45 or food_pct < 45:
+            stock_status = "Reorder Alert"
+            status_tag = "tag-warning"
+        else:
+            stock_status = "Normal"
+            status_tag = "tag-ok"
+
+        hub_data.append({
+            "id": h.id,
+            "name": h.name,
+            "role": h.organization_type or "Regional Relief Depot",
+            "latitude": h.latitude,
+            "longitude": h.longitude,
+            "lat": h.latitude,
+            "lon": h.longitude,
+            "status": stock_status,
+            "status_tag": status_tag,
+            "days_remaining": days_remaining,
+            "assigned_crises": assigned_crises,
+            "lead_time_days": lead_time,
+            
+            # Stock Values
+            "water": {
+                "current": curr_w,
+                "max": max_w,
+                "capacity": max_w,
+                "rop": round(reorder_water_threshold),
+                "pct": water_pct,
+                "display": f"{round(curr_w/1000):,}k / {round(max_w/1000000, 1)}M L",
+                "daily_burn": round(effective_daily_burn_water)
+            },
+            "food": {
+                "current": curr_f,
+                "max": max_f,
+                "capacity": max_f,
+                "rop": round(reorder_food_threshold),
+                "pct": food_pct,
+                "display": f"{round(curr_f/1000):,}k / {round(max_f/1000):,}k packs",
+                "daily_burn": round(effective_daily_burn_food)
+            },
+            "medical": {
+                "current": curr_med,
+                "max": max_med,
+                "capacity": max_med,
+                "rop": round(max_med * 0.2),
+                "pct": med_pct,
+                "display": f"{curr_med:,} / {max_med:,} kits"
+            },
+            "shelter": {
+                "current": curr_shelter,
+                "max": max_shelter,
+                "capacity": max_shelter,
+                "rop": round(max_shelter * 0.2),
+                "pct": shelter_pct,
+                "display": f"{curr_shelter:,} / {max_shelter:,} packs"
+            },
+            "fleet": {
+                "vehicles": int(h.vehicles_count or 0),
+                "boats": int(h.boats_count or 0),
+                "personnel": int(h.personnel_count or 0)
+            }
+        })
+
+    return {
+        "status": "success",
+        "count": len(hub_data),
+        "hubs": hub_data,
+        "summary": {
+            "total_water_liters": sum(h["water"]["current"] for h in hub_data),
+            "total_food_packs": sum(h["food"]["current"] for h in hub_data),
+            "total_medical_kits": sum(h["medical"]["current"] for h in hub_data),
+            "total_shelter_packs": sum(h["shelter"]["current"] for h in hub_data),
+            "total_vehicles": sum(h["fleet"]["vehicles"] for h in hub_data),
+            "total_boats": sum(h["fleet"]["boats"] for h in hub_data),
+            "total_personnel": sum(h["fleet"]["personnel"] for h in hub_data),
+            "active_hubs_count": len(hub_data)
+        }
+    }
+
+
+@app.get("/api/inventory/hubs/{hub_id}", tags=["inventory"])
+async def get_inventory_hub_detail(hub_id: int, db: AsyncSession = Depends(get_db)):
+    """
+    Returns detailed profile, itemized inventory, and recent transaction ledger for a specific hub.
+    """
+    stmt = select(models.RescueDepot).where(models.RescueDepot.id == hub_id)
+    res = await db.execute(stmt)
+    hub = res.scalar_one_or_none()
+    if not hub:
+        raise HTTPException(status_code=404, detail="Hub not found")
+
+    tx_stmt = select(models.InventoryTransaction).where(
+        models.InventoryTransaction.depot_id == hub_id
+    ).order_by(models.InventoryTransaction.created_at.desc()).limit(20)
+    tx_res = await db.execute(tx_stmt)
+    transactions = tx_res.scalars().all()
+
+    return {
+        "status": "success",
+        "hub": {
+            "id": hub.id,
+            "name": hub.name,
+            "latitude": hub.latitude,
+            "longitude": hub.longitude,
+            "water_inventory": hub.water_inventory,
+            "water_capacity": hub.water_capacity,
+            "food_inventory": hub.food_inventory,
+            "food_capacity": hub.food_capacity,
+            "medical_kits": hub.medical_kits,
+            "medical_capacity": hub.medical_capacity,
+            "shelter_packs": hub.shelter_packs,
+            "shelter_capacity": hub.shelter_capacity,
+            "vehicles_count": hub.vehicles_count,
+            "boats_count": hub.boats_count,
+            "personnel_count": hub.personnel_count,
+            "status": hub.status
+        },
+        "recent_transactions": [
+            {
+                "id": t.id,
+                "transaction_type": t.transaction_type,
+                "item_category": t.item_category,
+                "quantity_change": t.quantity_change,
+                "balance_after": t.balance_after,
+                "reference_code": t.reference_code,
+                "source_or_destination": t.source_or_destination,
+                "operator_name": t.operator_name,
+                "notes": t.notes,
+                "created_at": t.created_at.strftime("%Y-%m-%d %H:%M") if t.created_at else ""
+            }
+            for t in transactions
+        ]
+    }
+
+
+@app.post("/api/inventory/intake", tags=["inventory"])
+async def inventory_intake(req: InventoryIntakeRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Logs an inbound shipment, adding stock to the target warehouse and writing an immutable audit ledger entry.
+    """
+    stmt = select(models.RescueDepot).where(models.RescueDepot.id == req.hub_id)
+    res = await db.execute(stmt)
+    hub = res.scalar_one_or_none()
+    if not hub:
+        raise HTTPException(status_code=404, detail="Hub not found")
+
+    cat = req.item_category.lower().strip()
+    qty = float(req.quantity)
+
+    if cat == "water":
+        hub.water_inventory = float(hub.water_inventory or 0.0) + qty
+        bal = hub.water_inventory
+    elif cat == "food":
+        hub.food_inventory = float(hub.food_inventory or 0.0) + qty
+        bal = hub.food_inventory
+    elif cat == "medical":
+        hub.medical_kits = int(hub.medical_kits or 0) + int(qty)
+        bal = float(hub.medical_kits)
+    elif cat == "shelter":
+        hub.shelter_packs = int(hub.shelter_packs or 0) + int(qty)
+        bal = float(hub.shelter_packs)
+    elif cat == "vehicles":
+        hub.vehicles_count = int(hub.vehicles_count or 0) + int(qty)
+        bal = float(hub.vehicles_count)
+    elif cat == "boats":
+        hub.boats_count = int(hub.boats_count or 0) + int(qty)
+        bal = float(hub.boats_count)
+    elif cat == "personnel":
+        hub.personnel_count = int(hub.personnel_count or 0) + int(qty)
+        bal = float(hub.personnel_count)
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported item category: {req.item_category}")
+
+    tx = models.InventoryTransaction(
+        depot_id=hub.id,
+        transaction_type="INBOUND",
+        item_category=cat,
+        quantity_change=qty,
+        balance_after=bal,
+        reference_code=req.reference_code or f"IN-{int(datetime.now().timestamp())}",
+        source_or_destination=req.source,
+        operator_name=req.operator_name,
+        notes=req.notes
+    )
+    db.add(tx)
+    await db.commit()
+
+    # Broadcast event via WebSocket
+    try:
+        await manager.broadcast({
+            "type": "INVENTORY_UPDATED",
+            "hub_id": hub.id,
+            "hub_name": hub.name,
+            "action": "INBOUND",
+            "item_category": cat,
+            "quantity_change": qty,
+            "new_balance": bal,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        })
+    except Exception:
+        pass
+
+    return {
+        "status": "success",
+        "message": f"Successfully received {qty:,.0f} {cat} into {hub.name}",
+        "transaction_id": tx.id,
+        "new_balance": bal
+    }
+
+
+@app.post("/api/inventory/issue", tags=["inventory"])
+async def inventory_issue(req: InventoryIssueRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Issues/dispatches supplies out of the warehouse for field teams, verifying stock sufficiency and recording transaction.
+    """
+    stmt = select(models.RescueDepot).where(models.RescueDepot.id == req.hub_id)
+    res = await db.execute(stmt)
+    hub = res.scalar_one_or_none()
+    if not hub:
+        raise HTTPException(status_code=404, detail="Hub not found")
+
+    cat = req.item_category.lower().strip()
+    qty = float(req.quantity)
+
+    if cat == "water":
+        avail = float(hub.water_inventory or 0.0)
+        if qty > avail:
+            raise HTTPException(status_code=400, detail=f"Insufficient water in stock. Available: {avail:,.0f} L, Requested: {qty:,.0f} L")
+        hub.water_inventory = avail - qty
+        bal = hub.water_inventory
+    elif cat == "food":
+        avail = float(hub.food_inventory or 0.0)
+        if qty > avail:
+            raise HTTPException(status_code=400, detail=f"Insufficient food in stock. Available: {avail:,.0f} packs, Requested: {qty:,.0f} packs")
+        hub.food_inventory = avail - qty
+        bal = hub.food_inventory
+    elif cat == "medical":
+        avail = int(hub.medical_kits or 0)
+        if int(qty) > avail:
+            raise HTTPException(status_code=400, detail=f"Insufficient medical kits in stock. Available: {avail:,}, Requested: {int(qty):,}")
+        hub.medical_kits = avail - int(qty)
+        bal = float(hub.medical_kits)
+    elif cat == "shelter":
+        avail = int(hub.shelter_packs or 0)
+        if int(qty) > avail:
+            raise HTTPException(status_code=400, detail=f"Insufficient shelter packs in stock. Available: {avail:,}, Requested: {int(qty):,}")
+        hub.shelter_packs = avail - int(qty)
+        bal = float(hub.shelter_packs)
+    elif cat == "vehicles":
+        avail = int(hub.vehicles_count or 0)
+        if int(qty) > avail:
+            raise HTTPException(status_code=400, detail=f"Insufficient vehicles available. Ready: {avail}, Requested: {int(qty)}")
+        hub.vehicles_count = avail - int(qty)
+        bal = float(hub.vehicles_count)
+    elif cat == "boats":
+        avail = int(hub.boats_count or 0)
+        if int(qty) > avail:
+            raise HTTPException(status_code=400, detail=f"Insufficient boats available. Ready: {avail}, Requested: {int(qty)}")
+        hub.boats_count = avail - int(qty)
+        bal = float(hub.boats_count)
+    elif cat == "personnel":
+        avail = int(hub.personnel_count or 0)
+        if int(qty) > avail:
+            raise HTTPException(status_code=400, detail=f"Insufficient personnel on-duty. Available: {avail}, Requested: {int(qty)}")
+        hub.personnel_count = avail - int(qty)
+        bal = float(hub.personnel_count)
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported item category: {req.item_category}")
+
+    tx = models.InventoryTransaction(
+        depot_id=hub.id,
+        transaction_type="OUTBOUND",
+        item_category=cat,
+        quantity_change=-qty,
+        balance_after=bal,
+        reference_code=req.reference_code or f"OUT-{int(datetime.now().timestamp())}",
+        source_or_destination=req.destination,
+        operator_name=req.operator_name,
+        notes=req.notes
+    )
+    db.add(tx)
+    await db.commit()
+
+    # Broadcast event via WebSocket
+    try:
+        await manager.broadcast({
+            "type": "INVENTORY_UPDATED",
+            "hub_id": hub.id,
+            "hub_name": hub.name,
+            "action": "OUTBOUND",
+            "item_category": cat,
+            "quantity_change": -qty,
+            "new_balance": bal,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        })
+    except Exception:
+        pass
+
+    return {
+        "status": "success",
+        "message": f"Successfully issued {qty:,.0f} {cat} to {req.destination}",
+        "transaction_id": tx.id,
+        "new_balance": bal
+    }
+
+
+@app.post("/api/inventory/adjust", tags=["inventory"])
+async def inventory_adjust(req: InventoryAdjustRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Adjusts stock quantity following physical audit recount or damage write-offs, recording exact audit entry.
+    """
+    stmt = select(models.RescueDepot).where(models.RescueDepot.id == req.hub_id)
+    res = await db.execute(stmt)
+    hub = res.scalar_one_or_none()
+    if not hub:
+        raise HTTPException(status_code=404, detail="Hub not found")
+
+    cat = req.item_category.lower().strip()
+    new_qty = float(req.new_quantity)
+
+    if cat == "water":
+        old_val = float(hub.water_inventory or 0.0)
+        hub.water_inventory = new_qty
+    elif cat == "food":
+        old_val = float(hub.food_inventory or 0.0)
+        hub.food_inventory = new_qty
+    elif cat == "medical":
+        old_val = float(hub.medical_kits or 0)
+        hub.medical_kits = int(new_qty)
+    elif cat == "shelter":
+        old_val = float(hub.shelter_packs or 0)
+        hub.shelter_packs = int(new_qty)
+    elif cat == "vehicles":
+        old_val = float(hub.vehicles_count or 0)
+        hub.vehicles_count = int(new_qty)
+    elif cat == "boats":
+        old_val = float(hub.boats_count or 0)
+        hub.boats_count = int(new_qty)
+    elif cat == "personnel":
+        old_val = float(hub.personnel_count or 0)
+        hub.personnel_count = int(new_qty)
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported item category: {req.item_category}")
+
+    diff = new_qty - old_val
+
+    tx = models.InventoryTransaction(
+        depot_id=hub.id,
+        transaction_type="AUDIT",
+        item_category=cat,
+        quantity_change=diff,
+        balance_after=new_qty,
+        reference_code=req.reference_code or f"AUD-{int(datetime.now().timestamp())}",
+        source_or_destination=req.reason,
+        operator_name=req.operator_name,
+        notes=req.notes or f"Adjusted from {old_val:,.0f} to {new_qty:,.0f}"
+    )
+    db.add(tx)
+    await db.commit()
+
+    # Broadcast event via WebSocket
+    try:
+        await manager.broadcast({
+            "type": "INVENTORY_UPDATED",
+            "hub_id": hub.id,
+            "hub_name": hub.name,
+            "action": "AUDIT",
+            "item_category": cat,
+            "quantity_change": diff,
+            "new_balance": new_qty,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        })
+    except Exception:
+        pass
+
+    return {
+        "status": "success",
+        "message": f"Successfully updated {cat} inventory to {new_qty:,.0f} ({diff:+,.0f})",
+        "transaction_id": tx.id,
+        "new_balance": new_qty
+    }
+
+
+@app.get("/api/inventory/transactions", tags=["inventory"])
+async def get_inventory_transactions(
+    hub_id: Optional[int] = None,
+    item_category: Optional[str] = None,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Returns paginated audit ledger of all inventory transactions.
+    """
+    stmt = select(models.InventoryTransaction, models.RescueDepot.name).join(
+        models.RescueDepot, models.InventoryTransaction.depot_id == models.RescueDepot.id
+    )
+    if hub_id:
+        stmt = stmt.where(models.InventoryTransaction.depot_id == hub_id)
+    if item_category:
+        stmt = stmt.where(models.InventoryTransaction.item_category == item_category.lower())
+
+    stmt = stmt.order_by(models.InventoryTransaction.created_at.desc()).limit(min(limit, 200))
+    res = await db.execute(stmt)
+    rows = res.all()
+
+    tx_list = []
+    for tx, depot_name in rows:
+        tx_list.append({
+            "id": tx.id,
+            "hub_id": tx.depot_id,
+            "hub_name": depot_name,
+            "transaction_type": tx.transaction_type,
+            "item_category": tx.item_category,
+            "quantity_change": tx.quantity_change,
+            "balance_after": tx.balance_after,
+            "reference_code": tx.reference_code,
+            "source_or_destination": tx.source_or_destination,
+            "operator_name": tx.operator_name,
+            "notes": tx.notes,
+            "created_at": tx.created_at.strftime("%Y-%m-%d %H:%M:%S") if tx.created_at else ""
+        })
+
+    return {"status": "success", "count": len(tx_list), "transactions": tx_list}
+
+
+@app.get("/api/inventory/analytics/trends", tags=["inventory"])
+async def get_inventory_analytics_trends(hub_id: Optional[int] = None, db: AsyncSession = Depends(get_db)):
+    """
+    Computes pure ledger-driven dynamic data analysis trends:
+    1. 7-day projected inventory runway curves per Hub calibrated against actual live stock balances and 30-day empirical burn rates.
+    2. 100% Database-driven weekly Inflow vs Outflow velocity computed directly from the immutable transaction ledger.
+    Supports filtering by specific hub_id for individual hub drilldown.
+    """
+    hubs = await _get_or_create_hub_records(db)
+    if hub_id:
+        hubs = [h for h in hubs if h.id == hub_id]
+
+    # Fetch live transaction ledger entries from database
+    tx_stmt = select(models.InventoryTransaction).order_by(models.InventoryTransaction.created_at.desc())
+    if hub_id:
+        tx_stmt = tx_stmt.where(models.InventoryTransaction.depot_id == hub_id)
+    tx_res = await db.execute(tx_stmt)
+    transactions = tx_res.scalars().all()
+
+    now_utc = datetime.now(timezone.utc)
+
+    # 1. 7-day projected runway simulation derived from dynamic 30-day outbound burn rates per hub
+    days = ["Day 1", "Day 2", "Day 3", "Day 4", "Day 5", "Day 6", "Day 7"]
+    trajectories = []
+    for h in hubs:
+        w_curr = float(h.water_inventory or 0.0)
+        f_curr = float(h.food_inventory or 0.0)
+        med_curr = int(h.medical_kits or 0)
+
+        hub_txs = [t for t in transactions if t.depot_id == h.id]
+        outbound_w = sum(abs(t.quantity_change) for t in hub_txs if t.transaction_type == "OUTBOUND" and (t.item_category or "").lower() == "water")
+        outbound_f = sum(abs(t.quantity_change) for t in hub_txs if t.transaction_type == "OUTBOUND" and (t.item_category or "").lower() == "food")
+        outbound_m = sum(abs(t.quantity_change) for t in hub_txs if t.transaction_type == "OUTBOUND" and (t.item_category or "").lower() == "medical")
+
+        w_burn = max(5000.0, round(outbound_w / 30.0)) if outbound_w > 0 else float(h.average_daily_burn_water or 15000.0)
+        f_burn = max(800.0, round(outbound_f / 30.0)) if outbound_f > 0 else float(h.average_daily_burn_food or 3000.0)
+        m_burn = max(10, round(outbound_m / 30.0)) if outbound_m > 0 else max(10, round(float(h.medical_capacity or 3000) * 0.015))
+
+        proj_water = [max(0, round(w_curr - (w_burn * i))) for i in range(1, 8)]
+        proj_food = [max(0, round(f_curr - (f_burn * i))) for i in range(1, 8)]
+        proj_med = [max(0, round(med_curr - (m_burn * i))) for i in range(1, 8)]
+
+        trajectories.append({
+            "hub_name": h.name,
+            "projected_water": proj_water,
+            "projected_food": proj_food,
+            "projected_medical": proj_med
+        })
+
+    # 2. Pure Database Ledger Weekly Inflow vs Outflow Velocity across 5 time buckets
+    velocity_labels = ["4 Wks Ago", "3 Wks Ago", "2 Wks Ago", "Last Week", "This Week"]
+    inflow_w = [0.0, 0.0, 0.0, 0.0, 0.0]
+    outflow_w = [0.0, 0.0, 0.0, 0.0, 0.0]
+    inflow_f = [0.0, 0.0, 0.0, 0.0, 0.0]
+    outflow_f = [0.0, 0.0, 0.0, 0.0, 0.0]
+    inflow_m = [0.0, 0.0, 0.0, 0.0, 0.0]
+    outflow_m = [0.0, 0.0, 0.0, 0.0, 0.0]
+
+    for tx in transactions:
+        tx_dt = tx.created_at
+        if not tx_dt:
+            continue
+        if tx_dt.tzinfo is None:
+            tx_dt = tx_dt.replace(tzinfo=timezone.utc)
+        
+        days_ago = (now_utc - tx_dt).total_seconds() / 86400.0
+        if days_ago > 35:
+            continue
+        
+        bucket_idx = 4 # Default to This Week
+        if days_ago > 28:
+            bucket_idx = 0 # 4 Wks Ago
+        elif days_ago > 21:
+            bucket_idx = 1 # 3 Wks Ago
+        elif days_ago > 14:
+            bucket_idx = 2 # 2 Wks Ago
+        elif days_ago > 7:
+            bucket_idx = 3 # Last Week
+        else:
+            bucket_idx = 4 # This Week
+
+        qty_abs = abs(float(tx.quantity_change or 0.0))
+        cat = (tx.item_category or "").lower()
+
+        if tx.transaction_type == "INBOUND":
+            if cat == "water":
+                inflow_w[bucket_idx] += qty_abs
+            elif cat == "food":
+                inflow_f[bucket_idx] += qty_abs
+            elif cat == "medical":
+                inflow_m[bucket_idx] += qty_abs
+        elif tx.transaction_type == "OUTBOUND":
+            if cat == "water":
+                outflow_w[bucket_idx] += qty_abs
+            elif cat == "food":
+                outflow_f[bucket_idx] += qty_abs
+            elif cat == "medical":
+                outflow_m[bucket_idx] += qty_abs
+
+    return {
+        "status": "success",
+        "projection_days": days,
+        "trajectories": trajectories,
+        "velocity": {
+            "labels": velocity_labels,
+            "water": {
+                "inflow": [round(v) for v in inflow_w],
+                "outflow": [round(v) for v in outflow_w]
+            },
+            "food": {
+                "inflow": [round(v) for v in inflow_f],
+                "outflow": [round(v) for v in outflow_f]
+            },
+            "medical": {
+                "inflow": [round(v) for v in inflow_m],
+                "outflow": [round(v) for v in outflow_m]
+            }
+        }
+    }
+
+
+@app.get("/api/inventory/analytics/rebalance", tags=["inventory"])
+async def get_inventory_rebalance_recommendations(db: AsyncSession = Depends(get_db)):
+    """
+    Evaluates stock distribution across all regional hubs to identify supply deficits vs surplus.
+    Calculates the optimal inter-hub transfer route, distance, estimated road transit time,
+    and required heavy transport trucks (15-18 tons capacity).
+    """
+    hubs = await _get_or_create_hub_records(db)
+
+    # Sort hubs by min stock percentage across water and food
+    def get_hub_min_pct(h):
+        w_pct = (float(h.water_inventory or 0) / max(float(h.water_capacity or 1), 1.0)) * 100
+        f_pct = (float(h.food_inventory or 0) / max(float(h.food_capacity or 1), 1.0)) * 100
+        return min(w_pct, f_pct)
+
+    sorted_by_stock = sorted(hubs, key=get_hub_min_pct)
+    if len(sorted_by_stock) < 2:
+        return {
+            "status": "balanced",
+            "message": "All regional hubs are currently operating within balanced safety reserves.",
+            "recommendation": None
+        }
+
+    lowest_hub = sorted_by_stock[0]
+    highest_hub = sorted_by_stock[-1]
+
+    low_w_pct = (float(lowest_hub.water_inventory or 0) / max(float(lowest_hub.water_capacity or 1), 1.0)) * 100
+    low_f_pct = (float(lowest_hub.food_inventory or 0) / max(float(lowest_hub.food_capacity or 1), 1.0)) * 100
+    high_w_pct = (float(highest_hub.water_inventory or 0) / max(float(highest_hub.water_capacity or 1), 1.0)) * 100
+    high_f_pct = (float(highest_hub.food_inventory or 0) / max(float(highest_hub.food_capacity or 1), 1.0)) * 100
+
+    depleted_hub = None
+    surplus_hub = None
+    critical_item = "water"
+    transfer_amount = 0.0
+
+    if low_w_pct < 70 and high_w_pct >= 60 and lowest_hub.id != highest_hub.id:
+        critical_item = "water"
+        depleted_hub = lowest_hub
+        surplus_hub = highest_hub
+        deficiency = (float(lowest_hub.water_capacity or 1200000) * 0.70) - float(lowest_hub.water_inventory or 0)
+        available_surplus = max(0.0, float(highest_hub.water_inventory or 0) - (float(highest_hub.water_capacity or 1500000) * 0.45))
+        transfer_amount = max(20000.0, min(deficiency, available_surplus, 250000.0))
+        transfer_amount = round(transfer_amount / 5000) * 5000
+    elif low_f_pct < 70 and high_f_pct >= 60 and lowest_hub.id != highest_hub.id:
+        critical_item = "food"
+        depleted_hub = lowest_hub
+        surplus_hub = highest_hub
+        deficiency = (float(lowest_hub.food_capacity or 180000) * 0.70) - float(lowest_hub.food_inventory or 0)
+        available_surplus = max(0.0, float(highest_hub.food_inventory or 0) - (float(highest_hub.food_capacity or 250000) * 0.45))
+        transfer_amount = max(5000.0, min(deficiency, available_surplus, 40000.0))
+        transfer_amount = round(transfer_amount / 1000) * 1000
+
+    if not depleted_hub or not surplus_hub or transfer_amount <= 0:
+        return {
+            "status": "balanced",
+            "message": "All regional hubs are currently operating within balanced safety reserves.",
+            "recommendation": None
+        }
+
+    dist_km = haversine_distance(
+        float(surplus_hub.latitude), float(surplus_hub.longitude),
+        float(depleted_hub.latitude), float(depleted_hub.longitude)
+    )
+    transit_hours = round((dist_km * 1.25 / 50.0) + 0.5, 1)
+    hours_int = int(transit_hours)
+    mins_int = int(round((transit_hours - hours_int) * 60))
+    formatted_time = f"{hours_int}h {mins_int}m"
+
+    if critical_item == "water":
+        tons = transfer_amount / 1000.0
+        trucks = max(1, int(round(tons / 15.0)))
+        unit_label = "Liters of Water"
+    elif critical_item == "food":
+        tons = (transfer_amount * 2.5) / 1000.0
+        trucks = max(1, int(round(tons / 15.0)))
+        unit_label = "Emergency Food Packs"
+    else:
+        trucks = 1
+        unit_label = "Medical Trauma Kits"
+
+    item_pct = int(low_w_pct if critical_item == "water" else low_f_pct)
+
+    return {
+        "status": "imbalance_detected",
+        "recommendation": {
+            "source_hub_id": surplus_hub.id,
+            "source_hub_name": surplus_hub.name,
+            "target_hub_id": depleted_hub.id,
+            "target_hub_name": depleted_hub.name,
+            "item_category": critical_item,
+            "quantity": transfer_amount,
+            "formatted_quantity": f"{int(transfer_amount):,} {unit_label}",
+            "distance_km": round(dist_km, 1),
+            "transit_hours": transit_hours,
+            "formatted_time": formatted_time,
+            "trucks_needed": trucks,
+            "urgency": "High" if item_pct < 35 else "Medium",
+            "urgency_class": "tag-critical" if item_pct < 35 else "tag-warning",
+            "title": f"Transfer {int(transfer_amount):,} {unit_label} from {surplus_hub.name} to {depleted_hub.name}",
+            "description": f"{depleted_hub.name} is operating at {item_pct}% capacity. Transferring surplus from {surplus_hub.name} restores regional buffer in {formatted_time} via {trucks} heavy transport trucks."
+        }
+    }
+
+
+@app.post("/api/inventory/transfer", tags=["inventory"])
+async def execute_inventory_transfer(req: InventoryTransferRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Executes an atomic inter-hub stock rebalance transfer in the database:
+    1. Validates sufficient stock at source hub.
+    2. Deducts stock from source hub & writes OUTBOUND transaction ledger entry.
+    3. Adds stock to target hub & writes INBOUND transaction ledger entry.
+    4. Commits both operations in a single atomic SQL transaction.
+    """
+    if req.source_hub_id == req.target_hub_id:
+        raise HTTPException(status_code=400, detail="Source and target hubs must be different")
+
+    source_stmt = select(models.RescueDepot).where(models.RescueDepot.id == req.source_hub_id)
+    source_res = await db.execute(source_stmt)
+    source_hub = source_res.scalar_one_or_none()
+
+    target_stmt = select(models.RescueDepot).where(models.RescueDepot.id == req.target_hub_id)
+    target_res = await db.execute(target_stmt)
+    target_hub = target_res.scalar_one_or_none()
+
+    if not source_hub or not target_hub:
+        raise HTTPException(status_code=404, detail="Source or target hub not found")
+
+    cat = req.item_category.lower().strip()
+    qty = float(req.quantity)
+
+    # Validate stock sufficiency at source hub
+    if cat == "water":
+        curr_stock = float(source_hub.water_inventory or 0.0)
+        if curr_stock < qty:
+            raise HTTPException(status_code=400, detail=f"Insufficient water at {source_hub.name}. Available: {curr_stock:,.0f} L")
+        source_hub.water_inventory = curr_stock - qty
+        target_hub.water_inventory = float(target_hub.water_inventory or 0.0) + qty
+        source_bal = source_hub.water_inventory
+        target_bal = target_hub.water_inventory
+    elif cat == "food":
+        curr_stock = float(source_hub.food_inventory or 0.0)
+        if curr_stock < qty:
+            raise HTTPException(status_code=400, detail=f"Insufficient food at {source_hub.name}. Available: {curr_stock:,.0f} packs")
+        source_hub.food_inventory = curr_stock - qty
+        target_hub.food_inventory = float(target_hub.food_inventory or 0.0) + qty
+        source_bal = source_hub.food_inventory
+        target_bal = target_hub.food_inventory
+    elif cat == "medical":
+        curr_stock = int(source_hub.medical_kits or 0)
+        if curr_stock < int(qty):
+            raise HTTPException(status_code=400, detail=f"Insufficient medical kits at {source_hub.name}. Available: {curr_stock:,}")
+        source_hub.medical_kits = curr_stock - int(qty)
+        target_hub.medical_kits = int(target_hub.medical_kits or 0) + int(qty)
+        source_bal = float(source_hub.medical_kits)
+        target_bal = float(target_hub.medical_kits)
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported item category: {cat}")
+
+    ref_code = f"XFER-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M')}-{source_hub.id}TO{target_hub.id}"
+
+    # 1. OUTBOUND Ledger Entry for Source Hub
+    tx_out = models.InventoryTransaction(
+        depot_id=source_hub.id,
+        transaction_type="OUTBOUND",
+        item_category=cat,
+        quantity_change=-qty,
+        balance_after=source_bal,
+        reference_code=ref_code,
+        source_or_destination=f"Inter-Hub Transfer to {target_hub.name}",
+        operator_name=req.operator_name or "Logistics Coordinator",
+        notes=req.notes or f"Automated network rebalancing transfer to support regional relief buffer."
+    )
+
+    # 2. INBOUND Ledger Entry for Target Hub
+    tx_in = models.InventoryTransaction(
+        depot_id=target_hub.id,
+        transaction_type="INBOUND",
+        item_category=cat,
+        quantity_change=qty,
+        balance_after=target_bal,
+        reference_code=ref_code,
+        source_or_destination=f"Inter-Hub Transfer from {source_hub.name}",
+        operator_name=req.operator_name or "Logistics Coordinator",
+        notes=req.notes or f"Received network rebalancing transfer from {source_hub.name}."
+    )
+
+    db.add(tx_out)
+    db.add(tx_in)
+    await db.commit()
+
+    return {
+        "status": "success",
+        "message": f"Successfully transferred {int(qty):,} {cat} from {source_hub.name} to {target_hub.name}",
+        "reference_code": ref_code,
+        "source_hub": {"id": source_hub.id, "name": source_hub.name, "new_balance": source_bal},
+        "target_hub": {"id": target_hub.id, "name": target_hub.name, "new_balance": target_bal}
+    }
+
+
+@app.post("/api/disaster/dispatch", tags=["disaster-mission"])
+async def dispatch_disaster_supplies(req: DisasterDispatchRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Dispatches specified relief supplies (water, food, medical) from a designated Hub to a disaster site.
+    Deducts stock from the Hub, logs OUTBOUND ledger entries, and creates/updates a persistent DisasterMission.
+    """
+    global _dashboard_cache
+    stmt = select(models.RescueDepot).where(models.RescueDepot.id == req.hub_id)
+    res = await db.execute(stmt)
+    hub = res.scalar_one_or_none()
+    if not hub:
+        raise HTTPException(status_code=404, detail="Selected Hub not found")
+
+    w_req = float(req.water_liters)
+    f_req = float(req.food_packs)
+    med_req = int(req.medical_kits)
+
+    if w_req == 0 and f_req == 0 and med_req == 0:
+        raise HTTPException(status_code=400, detail="Must specify at least one item quantity to dispatch")
+
+    # Validate Hub stock sufficiency
+    curr_w = float(hub.water_inventory or 0.0)
+    curr_f = float(hub.food_inventory or 0.0)
+    curr_med = int(hub.medical_kits or 0)
+
+    if w_req > curr_w:
+        raise HTTPException(status_code=400, detail=f"Insufficient water at {hub.name}. Available: {curr_w:,.0f} L, Requested: {w_req:,.0f} L")
+    if f_req > curr_f:
+        raise HTTPException(status_code=400, detail=f"Insufficient food at {hub.name}. Available: {curr_f:,.0f} packs, Requested: {f_req:,.0f} packs")
+    if med_req > curr_med:
+        raise HTTPException(status_code=400, detail=f"Insufficient medical kits at {hub.name}. Available: {curr_med:,} kits, Requested: {med_req:,} kits")
+
+    # Deduct stock
+    hub.water_inventory = curr_w - w_req
+    hub.food_inventory = curr_f - f_req
+    hub.medical_kits = curr_med - med_req
+
+    now_dt = datetime.now(timezone.utc)
+
+    # Record OUTBOUND ledger entries for deducted supplies
+    if w_req > 0:
+        tx_w = models.InventoryTransaction(
+            depot_id=hub.id,
+            transaction_type="OUTBOUND",
+            item_category="water",
+            quantity_change=-w_req,
+            balance_after=hub.water_inventory,
+            reference_code=f"DISP-{req.disaster_identifier[:12]}",
+            source_or_destination=req.disaster_title,
+            operator_name="Command Dispatcher",
+            notes=req.notes or f"Emergency convoy dispatch to {req.disaster_title}"
+        )
+        db.add(tx_w)
+
+    if f_req > 0:
+        tx_f = models.InventoryTransaction(
+            depot_id=hub.id,
+            transaction_type="OUTBOUND",
+            item_category="food",
+            quantity_change=-f_req,
+            balance_after=hub.food_inventory,
+            reference_code=f"DISP-{req.disaster_identifier[:12]}",
+            source_or_destination=req.disaster_title,
+            operator_name="Command Dispatcher",
+            notes=req.notes or f"Emergency food packs to {req.disaster_title}"
+        )
+        db.add(tx_f)
+
+    if med_req > 0:
+        tx_m = models.InventoryTransaction(
+            depot_id=hub.id,
+            transaction_type="OUTBOUND",
+            item_category="medical",
+            quantity_change=-float(med_req),
+            balance_after=float(hub.medical_kits),
+            reference_code=f"DISP-{req.disaster_identifier[:12]}",
+            source_or_destination=req.disaster_title,
+            operator_name="Command Dispatcher",
+            notes=req.notes or f"Trauma response kits to {req.disaster_title}"
+        )
+        db.add(tx_m)
+
+    # Upsert DisasterMission
+    m_stmt = select(models.DisasterMission).where(models.DisasterMission.disaster_identifier == req.disaster_identifier)
+    m_res = await db.execute(m_stmt)
+    mission = m_res.scalar_one_or_none()
+
+    if not mission:
+        mission = models.DisasterMission(
+            disaster_identifier=req.disaster_identifier,
+            disaster_title=req.disaster_title,
+            latitude=req.latitude,
+            longitude=req.longitude,
+            severity=req.severity,
+            status="Dispatched",
+            assigned_hub_id=hub.id,
+            assigned_hub_name=hub.name,
+            dispatched_water_liters=w_req,
+            dispatched_food_packs=f_req,
+            dispatched_medical_kits=med_req,
+            target_water_liters=req.target_water_liters or (req.severity * 15000.0),
+            target_food_packs=req.target_food_packs or (req.severity * 4000.0),
+            target_medical_kits=req.target_medical_kits or max(50, int(round(req.severity * 60))),
+            dispatched_at=now_dt,
+            notes=req.notes
+        )
+        db.add(mission)
+    else:
+        mission.status = "Dispatched"
+        mission.assigned_hub_id = hub.id
+        mission.assigned_hub_name = hub.name
+        mission.dispatched_water_liters = float(mission.dispatched_water_liters or 0.0) + w_req
+        mission.dispatched_food_packs = float(mission.dispatched_food_packs or 0.0) + f_req
+        mission.dispatched_medical_kits = int(mission.dispatched_medical_kits or 0) + med_req
+        mission.dispatched_at = now_dt
+        if req.notes:
+            mission.notes = req.notes
+
+    await db.commit()
+    _dashboard_cache = {}
+
+    # Broadcast via WebSocket to all connected dispatcher screens
+    try:
+        await manager.broadcast({
+            "type": "DISASTER_DISPATCHED",
+            "disaster_identifier": req.disaster_identifier,
+            "disaster_title": req.disaster_title,
+            "hub_id": hub.id,
+            "hub_name": hub.name,
+            "status": "Dispatched",
+            "dispatched_water": mission.dispatched_water_liters,
+            "dispatched_food": mission.dispatched_food_packs,
+            "dispatched_medical": mission.dispatched_medical_kits,
+            "timestamp": now_dt.isoformat()
+        })
+    except Exception:
+        pass
+
+    return {
+        "status": "success",
+        "message": f"Successfully dispatched supplies from {hub.name} to {req.disaster_title}",
+        "disaster_identifier": req.disaster_identifier,
+        "mission_status": "Dispatched",
+        "assigned_hub": hub.name,
+        "cumulative_dispatched": {
+            "water_liters": mission.dispatched_water_liters,
+            "food_packs": mission.dispatched_food_packs,
+            "medical_kits": mission.dispatched_medical_kits
+        }
+    }
+
+
+@app.post("/api/disaster/resolve", tags=["disaster-mission"])
+async def resolve_disaster_mission(req: DisasterResolveRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Marks a disaster as Resolved/Solved, persisting its status across GDACS refreshes and page reloads.
+    """
+    global _dashboard_cache
+    m_stmt = select(models.DisasterMission).where(models.DisasterMission.disaster_identifier == req.disaster_identifier)
+    m_res = await db.execute(m_stmt)
+    mission = m_res.scalar_one_or_none()
+
+    now_dt = datetime.now(timezone.utc)
+
+    if not mission:
+        mission = models.DisasterMission(
+            disaster_identifier=req.disaster_identifier,
+            disaster_title="Resolved Incident",
+            latitude=19.7633,
+            longitude=96.0785,
+            severity=5.0,
+            status="Resolved",
+            resolved_at=now_dt,
+            notes=req.notes or "Marked as resolved by commander"
+        )
+        db.add(mission)
+    else:
+        mission.status = "Resolved"
+        mission.resolved_at = now_dt
+        if req.notes:
+            mission.notes = req.notes
+
+    await db.commit()
+    _dashboard_cache = {}
+
+    try:
+        await manager.broadcast({
+            "type": "DISASTER_RESOLVED",
+            "disaster_identifier": req.disaster_identifier,
+            "status": "Resolved",
+            "timestamp": now_dt.isoformat()
+        })
+    except Exception:
+        pass
+
+    return {
+        "status": "success",
+        "message": f"Disaster {req.disaster_identifier} marked as Resolved",
+        "disaster_identifier": req.disaster_identifier,
+        "mission_status": "Resolved"
+    }
+
+
+@app.get("/api/disaster/missions", tags=["disaster-mission"])
+async def get_disaster_missions(db: AsyncSession = Depends(get_db)):
+    """
+    Returns full list of all active and resolved disaster missions from the database.
+    """
+    stmt = select(models.DisasterMission).order_by(models.DisasterMission.updated_at.desc())
+    res = await db.execute(stmt)
+    missions = res.scalars().all()
+
+    return {
+        "status": "success",
+        "count": len(missions),
+        "missions": [
+            {
+                "id": m.id,
+                "disaster_identifier": m.disaster_identifier,
+                "disaster_title": m.disaster_title,
+                "latitude": m.latitude,
+                "longitude": m.longitude,
+                "severity": m.severity,
+                "status": m.status,
+                "assigned_hub_id": m.assigned_hub_id,
+                "assigned_hub_name": m.assigned_hub_name,
+                "dispatched_water_liters": m.dispatched_water_liters,
+                "dispatched_food_packs": m.dispatched_food_packs,
+                "dispatched_medical_kits": m.dispatched_medical_kits,
+                "target_water_liters": m.target_water_liters,
+                "target_food_packs": m.target_food_packs,
+                "target_medical_kits": m.target_medical_kits,
+                "dispatched_at": m.dispatched_at.strftime("%Y-%m-%d %H:%M:%S") if m.dispatched_at else None,
+                "resolved_at": m.resolved_at.strftime("%Y-%m-%d %H:%M:%S") if m.resolved_at else None,
+                "notes": m.notes
+            }
+            for m in missions
+        ]
+    }
+
+
+@app.get("/api/depot-stock-analytics", tags=["analytics"])
+async def get_depot_stock_analytics(db: AsyncSession = Depends(get_db)):
+    """
+    Backward-compatible wrapper mapping directly to live RescueDepot inventory database records.
+    """
+    inv_data = await get_inventory_hubs(db=db)
+    hubs = inv_data.get("hubs", [])
+
+    depots = []
+    for h in hubs:
+        w_curr = h["water"]["current"]
+        w_max = h["water"]["max"]
+        f_curr = h["food"]["current"]
+        f_max = h["food"]["max"]
+        med_curr = h["medical"]["current"]
+
+        depots.append({
+            "id": h["id"],
+            "name": h["name"],
+            "role": h["role"],
+            "lat": h["latitude"],
+            "lon": h["longitude"],
+            "curr_water": w_curr,
+            "max_water": w_max,
+            "curr_food": f_curr,
+            "max_food": f_max,
+            "med_kits": med_curr,
+            "water_pct": h["water"]["pct"],
+            "food_pct": h["food"]["pct"],
+            "med_pct": h["medical"]["pct"],
+            "days_remaining": f"{h['days_remaining']} days",
+            "tag_class": h["status_tag"],
+            "assigned_crises": h["assigned_crises"],
+            "water_display": h["water"]["display"],
+            "food_display": h["food"]["display"],
+            "status": h["status"]
+        })
+
+    return {"status": "success", "count": len(depots), "depots": depots}
+
+
 @app.post("/api/depots/restock", tags=["depots"])
 async def restock_depots(req: RestockRequest, db: AsyncSession = Depends(get_db)):
     """
-    Triggers an emergency logistics restock convoy, replenishing warehouse reserves
-    (Potable Water, Food Rations, and Trauma Medical Kits) back to 100% full operational capacity.
+    Standard replenishment handler replenishing all inventory items to full capacity.
     """
-    global _depot_live_reserves
     target_name = (req.depot_name or "").strip()
-    
-    restocked_names = []
-    for name, data in _depot_live_reserves.items():
-        if not target_name or target_name.lower() in name.lower() or target_name.lower() == "all":
-            data["curr_water"] = data["max_water"]
-            data["curr_food"] = data["max_food"]
-            data["med_kits"] = data["max_med"]
-            restocked_names.append(name)
-            
-    # Also sync database models if present
-    try:
-        stmt = select(models.RescueDepot)
-        res = await db.execute(stmt)
-        for dp in res.scalars().all():
-            for name in restocked_names:
-                if name.lower() in str(dp.name).lower():
-                    setattr(dp, "water_inventory", _depot_live_reserves[name]["max_water"])
-                    setattr(dp, "food_inventory", _depot_live_reserves[name]["max_food"])
-        await db.commit()
-    except Exception as db_err:
-        print(f"Notice during restock DB commit: {db_err}")
+    stmt = select(models.RescueDepot)
+    res = await db.execute(stmt)
+    hubs = res.scalars().all()
 
-    # Broadcast collaborative event to active dashboards
+    restocked_names = []
+    for h in hubs:
+        if not target_name or target_name.lower() in str(h.name).lower() or target_name.lower() == "all":
+            w_diff = (h.water_capacity or 1200000.0) - (h.water_inventory or 0.0)
+            f_diff = (h.food_capacity or 180000.0) - (h.food_inventory or 0.0)
+            
+            h.water_inventory = h.water_capacity or 1200000.0
+            h.food_inventory = h.food_capacity or 180000.0
+            h.medical_kits = h.medical_capacity or 3400
+            h.shelter_packs = h.shelter_capacity or 1500
+            restocked_names.append(str(h.name))
+
+            if w_diff > 0:
+                db.add(models.InventoryTransaction(
+                    depot_id=h.id,
+                    transaction_type="INBOUND",
+                    item_category="water",
+                    quantity_change=w_diff,
+                    balance_after=h.water_inventory,
+                    reference_code="RESTOCK-BULK",
+                    source_or_destination="National Emergency Reserve Replenishment",
+                    operator_name="Automated Logistics Convoy",
+                    notes="Full capacity replenishment"
+                ))
+
+    await db.commit()
+
     try:
         await manager.broadcast({
-            "type": "DEPOT_RESTOCKED",
+            "type": "INVENTORY_UPDATED",
+            "action": "RESTOCK_ALL",
             "depots": restocked_names,
             "timestamp": datetime.now(timezone.utc).isoformat()
         })
@@ -1657,104 +2942,9 @@ async def restock_depots(req: RestockRequest, db: AsyncSession = Depends(get_db)
 
     return {
         "status": "success",
-        "message": f"Logistics restock convoys successfully dispatched for: {', '.join(restocked_names)}",
+        "message": f"Logistics restock completed for: {', '.join(restocked_names)}",
         "restocked_depots": restocked_names
     }
-
-
-@app.get("/api/depot-stock-analytics", tags=["analytics"])
-async def get_depot_stock_analytics(db: AsyncSession = Depends(get_db)):
-    """
-    Dynamically computes warehouse reserves, live disaster demand burn rates, 
-    and days of supply remaining for Myanmar's 3 national logistics depots.
-    """
-    global _depot_live_reserves
-    disasters = await fetch_active_disasters()
-
-    depots: List[Dict[str, Any]] = [
-        {
-            "name": "Yangon Central Logistics Base",
-            "role": "Southern delta & maritime hub",
-            "lat": 16.8661,
-            "lon": 96.1561,
-            "max_water": _depot_live_reserves["Yangon Central Logistics Base"]["max_water"],
-            "max_food": _depot_live_reserves["Yangon Central Logistics Base"]["max_food"],
-            "med_kits": int(_depot_live_reserves["Yangon Central Logistics Base"]["med_kits"]),
-            "curr_water": _depot_live_reserves["Yangon Central Logistics Base"]["curr_water"],
-            "curr_food": _depot_live_reserves["Yangon Central Logistics Base"]["curr_food"]
-        },
-        {
-            "name": "Naypyidaw Strategic Reserve",
-            "role": "National capital strategic stock",
-            "lat": 19.7633,
-            "lon": 96.0785,
-            "max_water": _depot_live_reserves["Naypyidaw Strategic Reserve"]["max_water"],
-            "max_food": _depot_live_reserves["Naypyidaw Strategic Reserve"]["max_food"],
-            "med_kits": int(_depot_live_reserves["Naypyidaw Strategic Reserve"]["med_kits"]),
-            "curr_water": _depot_live_reserves["Naypyidaw Strategic Reserve"]["curr_water"],
-            "curr_food": _depot_live_reserves["Naypyidaw Strategic Reserve"]["curr_food"]
-        },
-        {
-            "name": "Mandalay Regional Depot",
-            "role": "Northern faultline corridor",
-            "lat": 21.9588,
-            "lon": 96.0891,
-            "max_water": _depot_live_reserves["Mandalay Regional Depot"]["max_water"],
-            "max_food": _depot_live_reserves["Mandalay Regional Depot"]["max_food"],
-            "med_kits": int(_depot_live_reserves["Mandalay Regional Depot"]["med_kits"]),
-            "curr_water": _depot_live_reserves["Mandalay Regional Depot"]["curr_water"],
-            "curr_food": _depot_live_reserves["Mandalay Regional Depot"]["curr_food"]
-        }
-    ]
-
-    for dp in depots:
-        daily_burn_water = 0.0
-        daily_burn_food = 0.0
-        assigned_crises = 0
-
-        for d in disasters:
-            d_lat = float(d.get("lat", 0.0))
-            d_lon = float(d.get("lon", 0.0))
-            dist = haversine_distance(float(dp["lat"]), float(dp["lon"]), d_lat, d_lon)
-            if dist < 350:
-                d_sev = float(d.get("severity", 5.0))
-                spatial = analyze_disaster_impact(d_lat, d_lon, d_sev)
-                daily_burn_water += float(spatial.get("total_water_liters") or (d_sev * 12000)) * 0.12
-                daily_burn_food += float(spatial.get("total_food_packs") or (d_sev * 2800)) * 0.12
-                assigned_crises += 1
-
-        daily_burn_water = max(daily_burn_water, 25000.0)
-        daily_burn_food = max(daily_burn_food, 4500.0)
-
-        curr_w = float(dp["curr_water"])
-        max_w = float(dp["max_water"])
-        curr_f = float(dp["curr_food"])
-        max_f = float(dp["max_food"])
-
-        water_pct = int(round((curr_w / max_w) * 100))
-        food_pct = int(round((curr_f / max_f) * 100))
-        med_pct = int(round((float(dp["med_kits"]) / float(_depot_live_reserves[dp["name"]]["max_med"])) * 100))
-
-        days_remaining = int(round(min(curr_w / daily_burn_water, curr_f / daily_burn_food)))
-        days_remaining = max(3, min(days_remaining, 30))
-
-        if days_remaining <= 7:
-            tag_class = "tag-critical"
-        elif days_remaining <= 15:
-            tag_class = "tag-warning"
-        else:
-            tag_class = "tag-ok"
-
-        dp["water_pct"] = water_pct
-        dp["food_pct"] = food_pct
-        dp["med_pct"] = med_pct
-        dp["days_remaining"] = f"{days_remaining} days"
-        dp["tag_class"] = tag_class
-        dp["assigned_crises"] = assigned_crises
-        dp["water_display"] = f"{round(curr_w/1000)}k / {round(max_w/1000000, 1)}M L"
-        dp["food_display"] = f"{round(curr_f/1000)}k / {round(max_f/1000)}k packs"
-
-    return {"status": "success", "count": len(depots), "depots": depots}
 
 
 @app.get("/api/transport-analytics", tags=["analytics"])
@@ -2066,7 +3256,7 @@ async def poll_gdacs_loop():
     print("[GDACS Background Poller] Polling task initialized and running...")
     while True:
         try:
-            async with AsyncSessionLocal() as db:
+            async with _get_session_local()() as db:
                 disasters = await fetch_active_disasters()
                 for d in disasters:
                     try:
@@ -2139,7 +3329,7 @@ async def stream_disasters():
                     pass
 
                 if not payload:
-                    async with AsyncSessionLocal() as db:
+                    async with _get_session_local()() as db:
                         stmt = select(models.DisasterEvent).order_by(models.DisasterEvent.id.desc())
                         res = await db.execute(stmt)
                         events = res.scalars().all()

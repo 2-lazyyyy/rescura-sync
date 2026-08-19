@@ -1,40 +1,65 @@
-import os
-from typing import AsyncGenerator
+﻿import os
+from typing import AsyncGenerator, Any
+from urllib.parse import urlparse, urlunparse, quote
+
 from dotenv import load_dotenv
 
 import sqlalchemy
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
+from sqlalchemy.pool import NullPool
 
 load_dotenv()
 
 raw_db_url = os.getenv("DATABASE_URL", "").strip()
 
+
+def _encode_url_password(url: str) -> str:
+    try:
+        parsed = urlparse(url)
+        if parsed.password and ";" in parsed.password:
+            safe_password = quote(parsed.password, safe="")
+            userinfo = f"{parsed.username}:{safe_password}"
+            netloc = f"{userinfo}@{parsed.hostname}"
+            if parsed.port:
+                netloc = f"{netloc}:{parsed.port}"
+            fixed = urlunparse(parsed._replace(netloc=netloc))
+            return fixed
+    except Exception:
+        pass
+    return url
+
+
 def get_async_db_url(url: str) -> str:
     if not url:
         return "sqlite+aiosqlite:///./rescura_sync.db"
     if url.startswith("postgresql://"):
-        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
-    if url.startswith("postgres://"):
-        return url.replace("postgres://", "postgresql+asyncpg://", 1)
-    return url
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    elif url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+    return _encode_url_password(url)
 
-from sqlalchemy.pool import NullPool
 
 ASYNC_DATABASE_URL = get_async_db_url(raw_db_url)
 SQLITE_DATABASE_URL = "sqlite+aiosqlite:///./rescura_sync.db"
 
-from typing import Any
-
 if ASYNC_DATABASE_URL.startswith("sqlite"):
     engine_kwargs: dict[str, Any] = {"poolclass": NullPool}
+    _connect_args: dict[str, Any] = {}
 else:
-    engine_kwargs = {"pool_size": 25, "max_overflow": 50, "pool_timeout": 30.0}
+    engine_kwargs = {
+        "pool_size": 10,
+        "max_overflow": 20,
+        "pool_timeout": 10.0,
+        "pool_pre_ping": True,
+    }
+    _connect_args = {"command_timeout": 8, "timeout": 8}
 
 engine = create_async_engine(
     ASYNC_DATABASE_URL,
     echo=False,
     future=True,
+    connect_args=_connect_args,
     **engine_kwargs
 )
 
@@ -52,10 +77,6 @@ Base = declarative_base()
 
 
 async def init_db_schema():
-    """
-    Creates database tables and safely executes column migrations.
-    Falls back to local SQLite database if remote PostgreSQL fails or connection is rejected.
-    """
     global engine, AsyncSessionLocal, SessionLocal
     try:
         async with engine.begin() as conn:
@@ -69,13 +90,16 @@ async def init_db_schema():
             except Exception:
                 pass
     except Exception as err:
-        print(f"[Database Warning] Primary database connection failed ({err}). Falling back to local SQLite.")
-        if SQLITE_DATABASE_URL.startswith("sqlite"):
-            fb_kwargs = {"poolclass": NullPool}
-        else:
-            fb_kwargs = {"pool_size": 25, "max_overflow": 50, "pool_timeout": 30.0}
+        print(f"[Database Warning] Primary database connection failed ({type(err).__name__}). Falling back to local SQLite.")
+        fb_kwargs: dict[str, Any] = {"poolclass": NullPool}
         engine = create_async_engine(SQLITE_DATABASE_URL, echo=False, future=True, **fb_kwargs)
-        AsyncSessionLocal.configure(bind=engine)
+        AsyncSessionLocal = async_sessionmaker(
+            bind=engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+            autocommit=False,
+            autoflush=False
+        )
         SessionLocal = AsyncSessionLocal
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
@@ -95,5 +119,3 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             yield session
         finally:
             await session.close()
-
-

@@ -145,7 +145,7 @@
                     <p>Built for continuous operational resilience under extreme disaster field conditions:</p>
                     <ul>
                         <li><b>GDACS & USGS Live Streams:</b> Telemetry feeds are cached with stale-while-revalidate protection to provide instant sub-5ms responses while updating in the background.</li>
-                        <li><b>Dual-Engine Resilience:</b> Connects to cloud PostgreSQL (Supabase) and automatically falls back to embedded local SQLite with zero downtime if internet or satellite links drop.</li>
+                        <li><b>Dual-Engine Resilience:</b> High-performance async database storage engine with automatic migration and embedded persistence for continuous offline/online field readiness.</li>
                         <li><b>Multi-Dispatcher WebSockets:</b> When a commander locks and dispatches supplies, real-time WebSocket frames notify all active screens in under 10 milliseconds to prevent duplicate dispatches.</li>
                     </ul>
                 </div>

@@ -1,10 +1,3 @@
-// Supabase Client Setup Constants
-const SUPABASE_URL = 'https://jgbtudbialgitdxgkngj.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpnYnR1ZGJpYWxnaXRkeGdrbmdqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwNjgzODksImV4cCI6MjEwMTY0NDM4OX0.1Wc1P4seagQsTKcOKN9nhDDiakBIAnQo7FlHhJBUO8A';
-const supabaseClient = (window.supabase && SUPABASE_URL !== 'YOUR_URL_HERE' && SUPABASE_ANON_KEY !== 'YOUR_ANON_KEY_HERE')
-    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-    : null;
-
 // Base Tile Layers: Modern Clean Light Canvas, Dark Mode Canvas & High-Res Satellite Imagery
 const lightVoyagerLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
     maxZoom: 19,
@@ -217,11 +210,9 @@ let searchQuery = '';
 let activePolyline = null;
 let activeMarker = null;
 let mapMarkers = [];
-let sosCircleMarkers = [];
 let depotMarkers = [];
 let routePolylines = [];
 let gdacsAlertsData = [];
-let sosAlertsData = [];
 
 /**
  * Checks if geographic coordinates fall within the ASEAN / Southeast Asia region
@@ -436,9 +427,9 @@ async function apiFetch(path, options = {}) {
             const url = `${activeApiHost}${path}`;
             const res = await fetch(url, { ...fetchOptions, signal: controller.signal });
             clearTimeout(timer);
-            if (res && res.ok) return res;
+            if (res) return res;
         } catch (e) {
-            // fallback to candidates
+            // fallback to candidates on network failure
         }
     }
 
@@ -452,7 +443,7 @@ async function apiFetch(path, options = {}) {
             const url = `${host}${path}`;
             const res = await fetch(url, { ...fetchOptions, signal: controller.signal });
             clearTimeout(timer);
-            if (res && res.ok) {
+            if (res) {
                 activeApiHost = host;
                 sessionStorage.setItem('rescura_api_host', host);
                 return res;
@@ -587,22 +578,94 @@ map.on('popupclose', () => {
     }
 });
 
+function getDisasterIdentifierClient(title, lat, lon) {
+    const cleanT = String(title || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 25);
+    const latR = Number(lat || 0).toFixed(2);
+    const lonR = Number(lon || 0).toFixed(2);
+    return `${cleanT}_${latR}_${lonR}`;
+}
+window.getDisasterIdentifierClient = getDisasterIdentifierClient;
+
 /**
- * Generates the unified, executive light popup card HTML
+ * Generates the unified, executive light popup card HTML with operational mission controls
  */
-function buildDisasterPopupHTML(lat, lon, title, severity, timeStr, depotNameText, distanceKm, waterLiters, foodPacks, estBudgetUsd, etaInfo) {
+function buildDisasterPopupHTML(lat, lon, title, severity, timeStr, depotNameText, distanceKm, waterLiters, foodPacks, estBudgetUsd, etaInfo, disasterIdentifier, missionData, nearestHubId, medKitsCount) {
     const cont = getContinent(lat, lon, title);
     const numWater = Number(waterLiters) || 0;
     const numFood = Number(foodPacks) || 0;
     const numBudget = Number(estBudgetUsd) || Math.round((numWater * 0.50) + (numFood * 3.50));
-    const medKits = Math.max(50, Math.round(severity * 140 + (numWater / 400)));
+    const medKits = Number(medKitsCount) || Math.max(50, Math.round(severity * 60));
+    const dId = disasterIdentifier || getDisasterIdentifierClient(title, lat, lon);
+    const mission = missionData || { status: 'Active' };
+    const hubId = nearestHubId || 1;
+
+    const dispWater = Number(mission.dispatched_water_liters) || 0;
+    const dispFood = Number(mission.dispatched_food_packs) || 0;
+    const dispMed = Number(mission.dispatched_medical_kits) || 0;
+
+    const remainingWater = Math.max(0, numWater - dispWater);
+    const remainingFood = Math.max(0, numFood - dispFood);
+    const remainingMed = Math.max(0, medKits - dispMed);
+
+    const waterFulfillmentPct = numWater > 0 ? Math.min(100, Math.round((dispWater / numWater) * 100)) : 100;
+    const isPartiallySupplied = dispWater > 0 || dispFood > 0 || dispMed > 0;
+    const isFullySupplied = remainingWater === 0 && remainingFood === 0 && remainingMed === 0;
 
     const landEta = (etaInfo && etaInfo.modes && etaInfo.modes.land) ? etaInfo.modes.land.formatted_time : 'Calculating';
     const airEta = (etaInfo && etaInfo.modes && etaInfo.modes.air) ? etaInfo.modes.air.formatted_time : 'Calculating';
     const waterEta = (etaInfo && etaInfo.modes && etaInfo.modes.water) ? etaInfo.modes.water.formatted_time : 'Calculating';
 
+    const cleanTitleAttr = String(title).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+
+    // Mission status section
+    let missionSectionHtml = '';
+    if (mission.status === 'Dispatched' || isPartiallySupplied) {
+        missionSectionHtml = `
+            <div style="background: #fff7ed; border: 1px solid #fed7aa; border-radius: 6px; padding: 8px 10px; margin-bottom: 10px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <span style="font-size: 11px; font-weight: 700; color: #ea580c; text-transform: uppercase;">Dispatched (${mission.assigned_hub_name || depotNameText})</span>
+                    <span style="font-size: 10px; font-weight: 700; color: ${isFullySupplied ? '#166534' : '#ea580c'}; background: #fff; padding: 1px 6px; border-radius: 4px; border: 1px solid #fed7aa;">
+                        ${isFullySupplied ? '100% Fulfilled' : `${waterFulfillmentPct}% Fulfilled`}
+                    </span>
+                </div>
+                <div style="font-size: 11px; color: #7c2d12; margin-bottom: 6px;">
+                    <strong>${dispWater.toLocaleString()} L</strong> water &bull; 
+                    <strong>${dispFood.toLocaleString()}</strong> food &bull;
+                    <strong>${dispMed.toLocaleString()}</strong> kits sent
+                </div>
+                <div style="display: flex; gap: 6px;">
+                    <button type="button" class="btn btn-xs btn-primary" style="flex: 1; justify-content: center;" onclick="openDisasterDispatchModal('${dId}', '${cleanTitleAttr}', ${lat}, ${lon}, ${severity}, ${remainingWater}, ${remainingFood}, ${remainingMed}, ${hubId}, '${depotNameText}', ${distanceKm})">
+                        ${isFullySupplied ? 'Send additional' : 'Send remaining'}
+                    </button>
+                    <button type="button" class="btn btn-xs" style="flex: 1; justify-content: center;" onclick="resolveDisaster('${dId}')">Mark resolved</button>
+                </div>
+            </div>
+        `;
+    } else if (mission.status === 'Resolved') {
+        missionSectionHtml = `
+            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 8px 10px; margin-bottom: 10px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <span style="font-size: 11px; font-weight: 700; color: #166534; text-transform: uppercase;">Resolved</span>
+                    <span style="font-size: 10px; color: #15803d;">Mission Closed</span>
+                </div>
+                <div style="font-size: 11px; color: #166534; margin-bottom: 6px;">
+                    Relief mission completed &amp; target fulfilled.
+                </div>
+                <button type="button" class="btn btn-xs btn-quiet" style="width: 100%; justify-content: center;" onclick="openDisasterDispatchModal('${dId}', '${cleanTitleAttr}', ${lat}, ${lon}, ${severity}, ${numWater}, ${numFood}, ${medKits}, ${hubId}, '${depotNameText}', ${distanceKm})">Re-open &amp; dispatch</button>
+            </div>
+        `;
+    } else {
+        missionSectionHtml = `
+            <div style="margin-bottom: 10px;">
+                <button type="button" class="btn btn-sm btn-primary" style="width: 100%; justify-content: center; font-size: 12px; padding: 6px 10px;" onclick="openDisasterDispatchModal('${dId}', '${cleanTitleAttr}', ${lat}, ${lon}, ${severity}, ${numWater}, ${numFood}, ${medKits}, ${hubId}, '${depotNameText}', ${distanceKm})">
+                    Dispatch supplies from Hub
+                </button>
+            </div>
+        `;
+    }
+
     return `
-        <div class="disaster-popup-card" style="font-family: var(--font-sans, Inter, sans-serif); min-width: 260px; color: #0f172a; padding: 2px;">
+        <div class="disaster-popup-card" style="font-family: var(--font-sans, Inter, sans-serif); min-width: 270px; color: #0f172a; padding: 2px;">
             <!-- Top Header Badges -->
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                 <div style="display: flex; gap: 6px; align-items: center;">
@@ -623,6 +686,9 @@ function buildDisasterPopupHTML(lat, lon, title, severity, timeStr, depotNameTex
                 ${title}
             </h4>
 
+            <!-- Operational Mission Status Card -->
+            ${missionSectionHtml}
+
             <!-- Event Meta Bar -->
             <div style="font-size: 11px; color: #64748b; margin-bottom: 8px; display: flex; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px;">
                 <span>Reported Time</span>
@@ -636,23 +702,33 @@ function buildDisasterPopupHTML(lat, lon, title, severity, timeStr, depotNameTex
                 <span style="color: #64748b; font-size: 11px; margin-left: 4px;">(${distanceKm} km)</span>
             </div>
 
-            <!-- Relief Supplies Grid -->
+            <!-- Relief Supplies Grid (Displays Remaining Deficit & Baseline Total) -->
             <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 10px; margin-bottom: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                 <div>
-                    <span style="font-size: 10.5px; color: #64748b; display: block;">Water Needed</span>
-                    <strong style="font-size: 12px; color: #0284c7; font-variant-numeric: tabular-nums;">${numWater.toLocaleString()} L</strong>
+                    <span style="font-size: 10.5px; color: #64748b; display: block;">${isPartiallySupplied ? 'Water Remaining' : 'Water Needed'}</span>
+                    <strong style="font-size: 12px; color: ${isPartiallySupplied && remainingWater === 0 ? '#16a34a' : '#0284c7'}; font-variant-numeric: tabular-nums;">
+                        ${isPartiallySupplied ? `${remainingWater.toLocaleString()} L` : `${numWater.toLocaleString()} L`}
+                    </strong>
+                    ${isPartiallySupplied ? `<span style="font-size: 9.5px; color: #64748b; display: block;">Total: ${numWater.toLocaleString()} L</span>` : ''}
                 </div>
                 <div>
-                    <span style="font-size: 10.5px; color: #64748b; display: block;">Food Rations</span>
-                    <strong style="font-size: 12px; color: #d97706; font-variant-numeric: tabular-nums;">${numFood.toLocaleString()} packs</strong>
+                    <span style="font-size: 10.5px; color: #64748b; display: block;">${isPartiallySupplied ? 'Food Remaining' : 'Food Rations'}</span>
+                    <strong style="font-size: 12px; color: ${isPartiallySupplied && remainingFood === 0 ? '#16a34a' : '#d97706'}; font-variant-numeric: tabular-nums;">
+                        ${isPartiallySupplied ? `${remainingFood.toLocaleString()} packs` : `${numFood.toLocaleString()} packs`}
+                    </strong>
+                    ${isPartiallySupplied ? `<span style="font-size: 9.5px; color: #64748b; display: block;">Total: ${numFood.toLocaleString()} packs</span>` : ''}
                 </div>
                 <div>
-                    <span style="font-size: 10.5px; color: #64748b; display: block;">Medical Kits</span>
-                    <strong style="font-size: 12px; color: #059669; font-variant-numeric: tabular-nums;">${medKits.toLocaleString()} kits</strong>
+                    <span style="font-size: 10.5px; color: #64748b; display: block;">${isPartiallySupplied ? 'Medical Remaining' : 'Medical Kits'}</span>
+                    <strong style="font-size: 12px; color: ${isPartiallySupplied && remainingMed === 0 ? '#16a34a' : '#059669'}; font-variant-numeric: tabular-nums;">
+                        ${isPartiallySupplied ? `${remainingMed.toLocaleString()} kits` : `${medKits.toLocaleString()} kits`}
+                    </strong>
+                    ${isPartiallySupplied ? `<span style="font-size: 9.5px; color: #64748b; display: block;">Total: ${medKits.toLocaleString()} kits</span>` : ''}
                 </div>
                 <div>
                     <span style="font-size: 10.5px; color: #64748b; display: block;">Est. Budget</span>
                     <strong style="font-size: 12px; color: #0f172a; font-variant-numeric: tabular-nums;">$${Math.round(numBudget).toLocaleString()}</strong>
+                    ${isPartiallySupplied ? `<span style="font-size: 9.5px; color: #16a34a; display: block;">${waterFulfillmentPct}% supplied</span>` : ''}
                 </div>
             </div>
 
@@ -729,8 +805,6 @@ window.focusMap = focusMap;
  */
 function switchTab(tab) {
     currentTab = tab;
-    document.getElementById('tab-gdacs').classList.toggle('active', tab === 'gdacs');
-    document.getElementById('tab-sos').classList.toggle('active', tab === 'sos');
     renderSidebarCards();
     updateContinentFilterCounts();
 }
@@ -740,16 +814,8 @@ function switchTab(tab) {
  */
 function updateStatsCounters() {
     const disastersCount = gdacsAlertsData.length;
-    const pendingCount = sosAlertsData.filter(a => !a.status || a.status === 'pending').length;
-    const dispatchedCount = sosAlertsData.filter(a => a.status === 'dispatched').length;
-
     const elDisasters = document.getElementById('stat-disasters');
-    const elPending = document.getElementById('stat-pending-sos');
-    const elDispatched = document.getElementById('stat-dispatched');
-
     if (elDisasters) elDisasters.innerText = disastersCount;
-    if (elPending) elPending.innerText = pendingCount;
-    if (elDispatched) elDispatched.innerText = dispatchedCount;
 
     updateContinentFilterCounts();
 }
@@ -758,7 +824,7 @@ function updateStatsCounters() {
  * Dynamically calculates total and per-continent disaster counts and updates filter chip badges
  */
 function updateContinentFilterCounts() {
-    const dataSet = currentTab === 'gdacs' ? gdacsAlertsData : sosAlertsData;
+    const dataSet = gdacsAlertsData;
 
     const counts = {
         All: dataSet.length,
@@ -772,12 +838,7 @@ function updateContinentFilterCounts() {
     dataSet.forEach(item => {
         let lat = item.latitude !== undefined ? item.latitude : (item.lat !== undefined ? item.lat : 0);
         let lon = item.longitude !== undefined ? item.longitude : (item.lon !== undefined ? item.lon : 0);
-        let titleStr = currentTab === 'gdacs' ? (item.title || '') : (item.location || '');
-        if (currentTab !== 'gdacs') {
-            const parsed = parseSOSCoords(item);
-            lat = parsed.lat;
-            lon = parsed.lon;
-        }
+        let titleStr = item.title || '';
         const cont = getContinent(lat, lon, titleStr);
         if (counts.hasOwnProperty(cont)) {
             counts[cont]++;
@@ -808,27 +869,7 @@ function updateContinentFilterCounts() {
     });
 }
 
-/**
- * Helper to consistently extract or assign lat/lon for SOS alerts
- */
-function parseSOSCoords(alert, index = 0) {
-    let lat = alert.latitude || alert.lat;
-    let lon = alert.longitude || alert.lon;
 
-    if ((!lat || !lon) && typeof alert.location === 'string') {
-        const match = alert.location.match(/([0-9]+\.[0-9]+),\s*([0-9]+\.[0-9]+)/);
-        if (match) {
-            lat = parseFloat(match[1]);
-            lon = parseFloat(match[2]);
-        }
-    }
-
-    if (!lat || !lon) {
-        lat = 16.8661 + (index * 0.008) - 0.01;
-        lon = 96.1561 + (index * 0.006) - 0.008;
-    }
-    return { lat, lon };
-}
 
 function formatOccurredTime(dateStr) {
     if (!dateStr) return 'Aug 9, 2026, 17:15 UTC';
@@ -916,20 +957,6 @@ function updateMapMarkersFilter() {
         }
     });
 
-    sosCircleMarkers.forEach(m => {
-        const c = m.continent || 'Asia';
-        const loc = (m.alertLocation || '').toLowerCase();
-        const matchesContinent = (selectedContinent === 'All' || c === selectedContinent);
-        const matchesSearch = (!searchQuery || loc.includes(searchQuery));
-
-        if (matchesContinent && matchesSearch) {
-            if (!map.hasLayer(m)) map.addLayer(m);
-            visibleMarkers.push(m);
-        } else {
-            if (map.hasLayer(m)) map.removeLayer(m);
-        }
-    });
-
     if (visibleMarkers.length > 0) {
         try {
             if (selectedContinent !== 'All') {
@@ -945,7 +972,6 @@ function updateMapMarkersFilter() {
  */
 function renderSidebarCards() {
     const alertsContainer = document.getElementById('alerts-container');
-    const sosContainer = document.getElementById('sos-alerts-container');
 
     const cols = {
         'Earthquake': { id: 'col-earthquake', countId: 'count-earthquake' },
@@ -1132,16 +1158,8 @@ function updateHazardAssessmentPanel() {
 
 function updateStatsCounters() {
     const disastersCount = gdacsAlertsData.length;
-    const pendingCount = sosAlertsData.filter(a => !a.status || a.status === 'pending').length;
-    const dispatchedCount = sosAlertsData.filter(a => a.status === 'dispatched').length;
-
     const elDisasters = document.getElementById('stat-disasters');
-    const elPending = document.getElementById('stat-pending-sos');
-    const elDispatched = document.getElementById('stat-dispatched');
-
     if (elDisasters) elDisasters.innerText = disastersCount;
-    if (elPending) elPending.innerText = pendingCount;
-    if (elDispatched) elDispatched.innerText = dispatchedCount;
 
     if (typeof updateContinentFilterCounts === 'function') {
         updateContinentFilterCounts();
@@ -1370,9 +1388,25 @@ async function fetchReliefData(lat = 17.3333, lon = 96.4833, severity = 7.5, tit
             depotNameText = etaInfo.assigned_depot_override;
         }
 
+        const dIdentifier = (existingEvt && existingEvt.disaster_identifier)
+            ? existingEvt.disaster_identifier
+            : getDisasterIdentifierClient(title, lat, lon);
+
+        const mission = (existingEvt && existingEvt.mission)
+            ? existingEvt.mission
+            : { status: 'Active' };
+
+        const nearestHubId = (existingEvt && existingEvt.nearest_depot && existingEvt.nearest_depot.id)
+            ? existingEvt.nearest_depot.id
+            : 1;
+
+        const pred = (existingEvt && existingEvt.latest_prediction) || {};
+        const medKitsVal = pred.medical_kits || Math.max(50, Math.round(severity * 60));
+
         const popupContent = buildDisasterPopupHTML(
             lat, lon, title, severity, timeStr,
-            depotNameText, distanceKm, waterLiters, foodPacks, estBudgetUsd, etaInfo
+            depotNameText, distanceKm, waterLiters, foodPacks, estBudgetUsd, etaInfo,
+            dIdentifier, mission, nearestHubId, medKitsVal
         );
 
         const popupOptions = getPopupOptions();
@@ -1409,167 +1443,9 @@ async function fetchReliefData(lat = 17.3333, lon = 96.4833, severity = 7.5, tit
     }
 }
 
-/**
- * Global window function to update an SOS alert's status in Supabase
- */
-window.updateSOSStatus = async function(alertId, newStatus) {
-    try {
-        if (supabaseClient) {
-            const { error } = await supabaseClient
-                .from('sos_alerts')
-                .update({ status: newStatus })
-                .eq('id', alertId);
 
-            if (error) {
-                console.error('Error updating SOS status in Supabase:', error);
-            }
-        }
-        await loadSOSAlerts();
-    } catch (err) {
-        console.error('Failed to update SOS status:', err);
-    }
-};
 
-/**
- * Fetches mobile SOS emergency alerts and renders animated pulsing radar DivIcons
- */
-async function loadSOSAlerts() {
-    try {
-        let alerts = [];
 
-        if (supabaseClient) {
-            const { data, error } = await supabaseClient.from('sos_alerts').select('*');
-            if (!error && data && data.length > 0) {
-                alerts = data;
-            }
-        }
-
-        if (!alerts.length) {
-            try {
-                const res = await apiFetch('/api/sos-alerts');
-                if (res && res.ok) {
-                    const json = await res.json();
-                    alerts = json.alerts || [];
-                }
-            } catch (err) {
-                console.warn('Backend SOS alerts fallback notice:', err);
-            }
-        }
-
-        sosAlertsData = alerts;
-        renderSidebarCards();
-
-        sosCircleMarkers.forEach(m => map.removeLayer(m));
-        sosCircleMarkers = [];
-
-        for (let index = 0; index < sosAlertsData.length; index++) {
-            const alert = sosAlertsData[index];
-            const { lat, lon } = parseSOSCoords(alert, index);
-            const urgentNeed = alert.urgent_need || alert.urgent_need_category || 'Water';
-            const affectedPeople = alert.affected_people || alert.affected_count || 10;
-            const status = alert.status || 'pending';
-            const estRescueTime = (1.2 + (affectedPeople / 250.0) + 1.0).toFixed(1);
-            const timeStr = formatOccurredTime(alert.created_at || alert.timestamp);
-            const cont = getContinent(lat, lon, alert.location);
-            const nearestDepotObj = findNearestDepotClientObject(lat, lon);
-
-            const pulseIcon = L.divIcon({
-                className: 'sos-div-wrapper',
-                html: `<div class="sos-pulse-marker ${status}"></div>`,
-                iconSize: [24, 24],
-                iconAnchor: [12, 12]
-            });
-
-            const marker = L.marker([lat, lon], { icon: pulseIcon }).addTo(map);
-            marker.on('click', () => {
-                toggleSelectDisaster(lat, lon, alert.location || 'Civilian SOS Sector', 5.0, alert.created_at || alert.timestamp, nearestDepotObj);
-            });
-            marker.continent = cont;
-            marker.alertLocation = alert.location || 'Civilian Sector';
-
-            const alertId = alert.id || index;
-
-            let distanceKm = 45.0;
-            let depotInfoText = 'Calculating Nearest Depot...';
-            const depotData = (typeof sosDepotResults !== 'undefined' && Array.isArray(sosDepotResults)) ? sosDepotResults[index] : null;
-
-            if (depotData && depotData.status === 'success' && depotData.nearest_depot) {
-                const depot = depotData.nearest_depot;
-                distanceKm = depot.distance_km || 45.0;
-                depotInfoText = `🛡️ <b>Nearest Depot:</b> ${depot.name} (${depot.distance_km} km)`;
-            } else {
-                distanceKm = getNearestDepotDistance(lat, lon);
-                const depotInfo = findNearestDepotClientObject(lat, lon);
-                depotInfoText = `🛡️ <b>Nearest Depot:</b> ${depotInfo.name} (${distanceKm} km)`;
-            }
-
-            marker.bindPopup(`
-                <div style="font-family: Inter, sans-serif; min-width: 210px; color: #f8fafc;">
-                    <div style="font-size: 11px; font-weight: 800; color: ${status === 'resolved' ? '#22c55e' : (status === 'dispatched' ? '#f97316' : '#ef4444')}; text-transform: uppercase; margin-bottom: 4px;">
-                        🚨 CIVILIAN SOS &bull; ${status}
-                    </div>
-                    <div style="font-size: 14px; font-weight: 700; color: #f8fafc; margin-bottom: 6px;">
-                        ${alert.location || 'Bago Sector'}
-                    </div>
-                    <div style="font-size: 12px; color: #c084fc; font-weight: 700; margin-bottom: 6px; background: rgba(192, 132, 252, 0.12); padding: 4px 8px; border-radius: 6px; border: 1px solid rgba(192, 132, 252, 0.3);">
-                        📅 Occurred: ${timeStr}
-                    </div>
-                    <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 3px;"><b>Urgent Need:</b> ${urgentNeed}</div>
-                    <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 3px;"><b>People Affected:</b> ${affectedPeople}</div>
-                    <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 3px;">${depotInfoText}</div>
-                    ${(() => {
-                        const eta = calculateClientETABreakdown(distanceKm, 5.0, alert.urgent_need || 'SOS Emergency');
-                        return `
-                        <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.1); margin-bottom: 8px;">
-                            <div style="font-size: 11px; font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">⏱️ Multi-Modal Dispatch ETAs:</div>
-                            <div style="display: flex; justify-content: space-between; gap: 4px; font-size: 10px;">
-                                <span style="background: rgba(15,23,42,0.6); padding: 3px 6px; border-radius: 4px; border: 1px solid ${eta.recommended_mode==='land'?'#f59e0b':'rgba(255,255,255,0.1)'}; color: #e2e8f0;">🚚 <b>Land:</b> ${eta.modes.land.formatted_time}</span>
-                                <span style="background: rgba(15,23,42,0.6); padding: 3px 6px; border-radius: 4px; border: 1px solid ${eta.recommended_mode==='air'?'#f59e0b':'rgba(255,255,255,0.1)'}; color: #e2e8f0;">🚁 <b>Air:</b> ${eta.modes.air.formatted_time}</span>
-                                <span style="background: rgba(15,23,42,0.6); padding: 3px 6px; border-radius: 4px; border: 1px solid ${eta.recommended_mode==='water'?'#f59e0b':'rgba(255,255,255,0.1)'}; color: #e2e8f0;">🚢 <b>Water:</b> ${eta.modes.water.formatted_time}</span>
-                            </div>
-                        </div>`;
-                    })()}
-                    <div style="display: flex; flex-direction: column; gap: 4px;">
-                        ${status !== 'dispatched' ? `<button class="btn-dispatch-action btn-dispatch" onclick="updateSOSStatus('${alertId}', 'dispatched')">Dispatch Team</button>` : ''}
-                        ${status !== 'resolved' ? `<button class="btn-dispatch-action btn-resolve" onclick="updateSOSStatus('${alertId}', 'resolved')">Mark Resolved</button>` : ''}
-                    </div>
-                </div>
-            `, getPopupOptions());
-
-            sosCircleMarkers.push(marker);
-        }
-
-    } catch (err) {
-        console.error('Error loading SOS alerts onto map:', err);
-    }
-}
-
-/**
- * Initialize Supabase Realtime Listener for instant updates on sos_alerts table
- */
-function initRealtimeListener() {
-    if (supabaseClient) {
-        try {
-            supabaseClient
-                .channel('public:sos_alerts')
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'sos_alerts' }, async (payload) => {
-                    console.log('Realtime SOS alert change detected:', payload);
-                    await loadSOSAlerts();
-
-                    if (payload.eventType === 'INSERT' && payload.new) {
-                        const newLat = payload.new.latitude || payload.new.lat;
-                        const newLon = payload.new.longitude || payload.new.lon;
-                        if (newLat && newLon) {
-                            focusMap(newLat, newLon);
-                        }
-                    }
-                })
-                .subscribe();
-        } catch (e) {
-            console.warn('Realtime listener subscription warning:', e);
-        }
-    }
-}
 
 async function loadAllDepots() {
     try {
@@ -1715,11 +1591,10 @@ async function initializeDashboard() {
         initDispatchWebSocket();
 
         // Run all API requests concurrently for sub-100ms initialization
-        const [analyticsResult, depotsResult, dashResult, sosResult] = await Promise.allSettled([
+        const [analyticsResult, depotsResult, dashResult] = await Promise.allSettled([
             loadAnalytics(),
             loadAllDepots(),
-            apiFetch('/api/dashboard-data'),
-            loadSOSAlerts()
+            apiFetch('/api/dashboard-data')
         ]);
 
         const dashRes = (dashResult.status === 'fulfilled') ? dashResult.value : null;
@@ -1798,10 +1673,15 @@ async function initializeDashboard() {
             let waterVal = latestPred ? latestPred.water_liters : 1500000;
             let foodVal = latestPred ? latestPred.food_packs : 250000;
             let budgetVal = event.total_estimated_budget_usd || Math.round((waterVal * 0.50) + (foodVal * 3.50));
+            const dIdentifier = event.disaster_identifier || getDisasterIdentifierClient(title, lat, lon);
+            const mission = event.mission || { status: 'Active' };
+            const nearestHubId = (nearestDepotObj && nearestDepotObj.id) ? nearestDepotObj.id : 1;
+            const medKitsVal = (latestPred && latestPred.medical_kits) ? latestPred.medical_kits : Math.max(50, Math.round(event.severity * 60));
 
             const popupContent = buildDisasterPopupHTML(
                 lat, lon, title, event.severity, timeStr,
-                depotNameText, distanceKm, waterVal, foodVal, budgetVal, etaInfo
+                depotNameText, distanceKm, waterVal, foodVal, budgetVal, etaInfo,
+                dIdentifier, mission, nearestHubId, medKitsVal
             );
 
             const marker = L.marker([lat, lon], { icon: buildDisasterIcon(event.severity) })
@@ -1814,13 +1694,13 @@ async function initializeDashboard() {
 
             marker.continent = cont;
             marker.disasterTitle = title;
+            marker.mission = mission;
 
             mapMarkers.push(marker);
         }
 
         renderSidebarCards();
         updateMapMarkersFilter();
-        initRealtimeListener();
         initSSEStream();
         handleUrlLocationParams();
 
@@ -2284,10 +2164,6 @@ function handleWebSocketMessage(data) {
         renderSidebarCards();
     } else if (data.type === 'DISASTER_DISPATCHED') {
         delete lockedDisastersMap[String(data.disaster_id)];
-        const sosItem = sosAlertsData.find(a => String(a.id) === String(data.disaster_id));
-        if (sosItem) {
-            sosItem.status = 'dispatched';
-        }
         renderSidebarCards();
         updateStatsCounters();
     }
@@ -2929,4 +2805,296 @@ window.addEventListener('DOMContentLoaded', () => {
         }, 300);
     }
 });
+
+
+// ==============================================================================
+// DISASTER DISPATCH & PERSISTENT MISSION CONTROLLER (Clean, Auto-Assigned Nearest Hub)
+// ==============================================================================
+
+let cachedHubsInventory = [];
+
+function getHaversineDistanceClient(lat1, lon1, lat2, lon2) {
+    const R = 6371; // km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+window.getHaversineDistanceClient = getHaversineDistanceClient;
+
+async function loadHubsForDispatchSelector() {
+    try {
+        const res = await apiFetch('/api/inventory/hubs');
+        if (res && res.ok) {
+            const data = await res.json();
+            cachedHubsInventory = data.hubs || [];
+        }
+    } catch (err) {
+        console.warn('Notice loading hubs:', err);
+    }
+}
+
+async function openDisasterDispatchModal(disasterIdentifier, title, lat, lon, sev, waterTarget, foodTarget, medTarget, nearestHubId, assignedDepotName, distanceKm) {
+    const modal = document.getElementById('modal-disaster-dispatch');
+    if (!modal) return;
+
+    if (!cachedHubsInventory || cachedHubsInventory.length === 0) {
+        await loadHubsForDispatchSelector();
+    }
+
+    // Determine the exact assigned Hub by:
+    // 1. Name match substring (e.g. "Mandalay", "Naypyidaw", "Yangon")
+    // 2. Nearest Hub ID
+    // 3. Shortest Haversine distance to disaster coordinates
+    let assignedHub = null;
+
+    if (assignedDepotName) {
+        const dLower = String(assignedDepotName).toLowerCase();
+        assignedHub = cachedHubsInventory.find(h => dLower.includes(h.name.toLowerCase()) || h.name.toLowerCase().includes(dLower));
+        if (!assignedHub) {
+            if (dLower.includes('mandalay')) assignedHub = cachedHubsInventory.find(h => h.id === 3);
+            else if (dLower.includes('naypyidaw')) assignedHub = cachedHubsInventory.find(h => h.id === 2);
+            else if (dLower.includes('yangon')) assignedHub = cachedHubsInventory.find(h => h.id === 1);
+        }
+    }
+
+    if (!assignedHub && nearestHubId) {
+        assignedHub = cachedHubsInventory.find(h => h.id === Number(nearestHubId));
+    }
+
+    if (!assignedHub && cachedHubsInventory.length > 0 && lat && lon) {
+        let minD = Infinity;
+        cachedHubsInventory.forEach(h => {
+            if (h.latitude && h.longitude) {
+                const d = getHaversineDistanceClient(lat, lon, h.latitude, h.longitude);
+                if (d < minD) {
+                    minD = d;
+                    assignedHub = h;
+                }
+            }
+        });
+    }
+
+    if (!assignedHub) {
+        assignedHub = cachedHubsInventory[0] || {
+            id: 1,
+            name: 'Yangon Central Logistics Base',
+            water: { current: 1000000 },
+            food: { current: 150000 },
+            medical: { current: 3000 }
+        };
+    }
+
+    const distDisplay = distanceKm ? `${Math.round(distanceKm)} km away` : '';
+
+    // Populate hidden inputs
+    document.getElementById('disp-disaster-id').value = disasterIdentifier || '';
+    document.getElementById('disp-disaster-title').value = title || '';
+    document.getElementById('disp-disaster-lat').value = lat || '';
+    document.getElementById('disp-disaster-lon').value = lon || '';
+    document.getElementById('disp-disaster-sev').value = sev || '';
+    document.getElementById('disp-hub-id').value = assignedHub.id;
+
+    // Populate Target Disaster Info
+    const targetNameEl = document.getElementById('disp-target-name');
+    if (targetNameEl) targetNameEl.innerText = title || 'Disaster Emergency Area';
+
+    const targetSevEl = document.getElementById('disp-target-sev');
+    if (targetSevEl) targetSevEl.innerText = `${sev}/10`;
+
+    const targetWaterEl = document.getElementById('disp-target-water');
+    if (targetWaterEl) targetWaterEl.innerText = `${Number(waterTarget || 0).toLocaleString()} L`;
+
+    const targetFoodEl = document.getElementById('disp-target-food');
+    if (targetFoodEl) targetFoodEl.innerText = `${Number(foodTarget || 0).toLocaleString()} packs`;
+
+    // Populate Assigned Hub Info Card (Read-only)
+    const hubNameEl = document.getElementById('disp-assigned-hub-name');
+    if (hubNameEl) {
+        hubNameEl.innerText = `${assignedHub.name} ${distDisplay ? '(' + distDisplay + ')' : ''}`;
+    }
+
+    const hubStockEl = document.getElementById('disp-assigned-hub-stock');
+    const availWater = assignedHub.water ? (assignedHub.water.current || 0) : 0;
+    const availFood = assignedHub.food ? (assignedHub.food.current || 0) : 0;
+    const availMed = assignedHub.medical ? (assignedHub.medical.current || 0) : 0;
+
+    if (hubStockEl) {
+        hubStockEl.innerHTML = `Available stock: <strong>${availWater.toLocaleString()} L</strong> water &bull; <strong>${availFood.toLocaleString()}</strong> food packs &bull; <strong>${availMed.toLocaleString()}</strong> medical kits`;
+    }
+
+    // Set Max bounds & Max hints for inputs
+    const inputWater = document.getElementById('disp-qty-water');
+    const inputFood = document.getElementById('disp-qty-food');
+    const inputMed = document.getElementById('disp-qty-medical');
+
+    if (inputWater) inputWater.max = availWater;
+    if (inputFood) inputFood.max = availFood;
+    if (inputMed) inputMed.max = availMed;
+
+    const hintWater = document.getElementById('disp-hint-water');
+    const hintFood = document.getElementById('disp-hint-food');
+    const hintMed = document.getElementById('disp-hint-medical');
+
+    if (hintWater) hintWater.innerText = `Max stock: ${availWater.toLocaleString()} L`;
+    if (hintFood) hintFood.innerText = `Max stock: ${availFood.toLocaleString()} packs`;
+    if (hintMed) hintMed.innerText = `Max stock: ${availMed.toLocaleString()} kits`;
+
+    // Pre-fill quantities: capped at available hub stock
+    if (inputWater) inputWater.value = Math.min(Number(waterTarget || 0), availWater);
+    if (inputFood) inputFood.value = Math.min(Number(foodTarget || 0), availFood);
+    if (inputMed) inputMed.value = Math.min(Number(medTarget || 0), availMed);
+
+    modal.classList.remove('hidden');
+}
+window.openDisasterDispatchModal = openDisasterDispatchModal;
+
+function closeDisasterDispatchModal() {
+    const modal = document.getElementById('modal-disaster-dispatch');
+    if (modal) modal.classList.add('hidden');
+}
+window.closeDisasterDispatchModal = closeDisasterDispatchModal;
+
+async function handleDisasterDispatchSubmit(e) {
+    e.preventDefault();
+    const btnSubmit = document.getElementById('btn-disp-submit');
+    if (btnSubmit) {
+        btnSubmit.disabled = true;
+        btnSubmit.innerText = 'Dispatching supplies...';
+    }
+
+    const disasterId = document.getElementById('disp-disaster-id').value;
+    const title = document.getElementById('disp-disaster-title').value;
+    const lat = parseFloat(document.getElementById('disp-disaster-lat').value);
+    const lon = parseFloat(document.getElementById('disp-disaster-lon').value);
+    const sev = parseFloat(document.getElementById('disp-disaster-sev').value);
+    const hubId = parseInt(document.getElementById('disp-hub-id').value, 10) || 1;
+    const waterLiters = parseFloat(document.getElementById('disp-qty-water').value) || 0;
+    const foodPacks = parseFloat(document.getElementById('disp-qty-food').value) || 0;
+    const medicalKits = parseInt(document.getElementById('disp-qty-medical').value, 10) || 0;
+    const notes = document.getElementById('disp-notes').value.trim();
+
+    // Client-side validation against available hub inventory
+    const selectedHub = cachedHubsInventory.find(h => h.id === hubId);
+    if (selectedHub) {
+        const curWater = selectedHub.water ? (selectedHub.water.current || 0) : 0;
+        const curFood = selectedHub.food ? (selectedHub.food.current || 0) : 0;
+        const curMed = selectedHub.medical ? (selectedHub.medical.current || 0) : 0;
+
+        if (waterLiters > curWater) {
+            alert(`Requested water (${waterLiters.toLocaleString()} L) exceeds available stock at ${selectedHub.name} (${curWater.toLocaleString()} L). Please reduce the quantity.`);
+            if (btnSubmit) {
+                btnSubmit.disabled = false;
+                btnSubmit.innerText = 'Confirm & dispatch supplies';
+            }
+            return;
+        }
+        if (foodPacks > curFood) {
+            alert(`Requested food (${foodPacks.toLocaleString()} packs) exceeds available stock at ${selectedHub.name} (${curFood.toLocaleString()} packs).`);
+            if (btnSubmit) {
+                btnSubmit.disabled = false;
+                btnSubmit.innerText = 'Confirm & dispatch supplies';
+            }
+            return;
+        }
+        if (medicalKits > curMed) {
+            alert(`Requested medical kits (${medicalKits.toLocaleString()} units) exceeds available stock at ${selectedHub.name} (${curMed.toLocaleString()} units).`);
+            if (btnSubmit) {
+                btnSubmit.disabled = false;
+                btnSubmit.innerText = 'Confirm & dispatch supplies';
+            }
+            return;
+        }
+    }
+
+    const payload = {
+        disaster_identifier: disasterId,
+        disaster_title: title,
+        latitude: lat,
+        longitude: lon,
+        severity: sev,
+        hub_id: hubId,
+        water_liters: waterLiters,
+        food_packs: foodPacks,
+        medical_kits: medicalKits,
+        notes: notes
+    };
+
+    try {
+        const res = await apiFetch('/api/disaster/dispatch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (!res) {
+            throw new Error('Unable to connect to the backend server. Please verify the server is running.');
+        }
+
+        if (!res.ok) {
+            let errorDetail = `Dispatch failed with status ${res.status}`;
+            try {
+                const errData = await res.json();
+                if (errData && errData.detail) {
+                    errorDetail = (typeof errData.detail === 'string') ? errData.detail : JSON.stringify(errData.detail);
+                }
+            } catch (_) {}
+            throw new Error(errorDetail);
+        }
+
+        closeDisasterDispatchModal();
+        document.getElementById('form-disaster-dispatch').reset();
+
+        // Refresh live dashboard to reflect new mission status
+        await initializeDashboard();
+
+    } catch (err) {
+        alert(err.message || 'Error executing disaster dispatch');
+    } finally {
+        if (btnSubmit) {
+            btnSubmit.disabled = false;
+            btnSubmit.innerText = 'Confirm & dispatch supplies';
+        }
+    }
+}
+window.handleDisasterDispatchSubmit = handleDisasterDispatchSubmit;
+
+async function resolveDisaster(disasterIdentifier) {
+    if (!confirm('Mark this disaster relief mission as Resolved?')) return;
+
+    try {
+        const res = await apiFetch('/api/disaster/resolve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                disaster_identifier: disasterIdentifier,
+                notes: 'Resolved by command coordinator'
+            })
+        });
+
+        if (!res) {
+            throw new Error('Unable to connect to the backend server.');
+        }
+
+        if (!res.ok) {
+            let errorDetail = `Failed to resolve disaster (${res.status})`;
+            try {
+                const errData = await res.json();
+                if (errData && errData.detail) {
+                    errorDetail = (typeof errData.detail === 'string') ? errData.detail : JSON.stringify(errData.detail);
+                }
+            } catch (_) {}
+            throw new Error(errorDetail);
+        }
+
+        await initializeDashboard();
+
+    } catch (err) {
+        alert(err.message || 'Error marking disaster as resolved');
+    }
+}
+window.resolveDisaster = resolveDisaster;
 

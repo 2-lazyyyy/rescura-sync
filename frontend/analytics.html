@@ -132,7 +132,7 @@
         <div class="tabs" role="tablist">
             <button onclick="switchAnalyticsTab('tab-telemetry')" id="btn-tab-telemetry" class="analytics-tab-btn tab active" role="tab">Overview &amp; Trends</button>
             <button onclick="switchAnalyticsTab('tab-simulator')" id="btn-tab-simulator" class="analytics-tab-btn tab" role="tab">Crisis Simulator</button>
-            <button onclick="switchAnalyticsTab('tab-inventory')" id="btn-tab-inventory" class="analytics-tab-btn tab" role="tab">Depot Stock</button>
+            <button onclick="switchAnalyticsTab('tab-inventory')" id="btn-tab-inventory" class="analytics-tab-btn tab" role="tab">Hub &amp; Warehouse Inventory</button>
             <button onclick="switchAnalyticsTab('tab-transport')" id="btn-tab-transport" class="analytics-tab-btn tab" role="tab">Transport Times</button>
         </div>
 
@@ -248,34 +248,29 @@
                     <!-- Predicted outputs: one surface, hairline-divided -->
                     <section class="card">
                         <header class="card-head">
-                            <h3>Predicted requirement</h3>
-                            <span class="card-note">Updates live</span>
+                            <h3>Predicted relief requirements</h3>
+                            <span class="card-note">RandomForest ML</span>
                         </header>
-                        <div class="result-grid">
+                        <div class="card-body sim-results-grid">
                             <div class="result">
-                                <span class="eyebrow">Water needed</span>
-                                <span class="metric-value" id="sim-res-water">1,275,000 L</span>
-                                <span class="result-note">15 L / person / day</span>
+                                <span class="eyebrow">Water volume</span>
+                                <span class="metric-value" id="sim-res-water">0 L</span>
+                                <span class="result-note">Drinking &amp; sanitation</span>
                             </div>
                             <div class="result">
-                                <span class="eyebrow">Food rations</span>
-                                <span class="metric-value" id="sim-res-food">212,500 Packs</span>
-                                <span class="result-note">2,100 kcal packs</span>
+                                <span class="eyebrow">Food packs</span>
+                                <span class="metric-value" id="sim-res-food">0 packs</span>
+                                <span class="result-note">3-day family rations</span>
                             </div>
                             <div class="result">
-                                <span class="eyebrow">Trauma kits</span>
-                                <span class="metric-value" id="sim-res-med">4,250 Kits</span>
-                                <span class="result-note">Surgical &amp; first aid</span>
-                            </div>
-                            <div class="result">
-                                <span class="eyebrow">Est. budget</span>
-                                <span class="metric-value" id="sim-res-budget">$1,381,250</span>
-                                <span class="result-note">Supply + fuel</span>
+                                <span class="eyebrow">Estimated budget</span>
+                                <span class="metric-value" id="sim-res-budget">$0</span>
+                                <span class="result-note">Direct procurement</span>
                             </div>
                             <div class="result">
                                 <span class="eyebrow">Land convoy ETA</span>
-                                <span class="metric-value" id="sim-res-eta-land">3.2 hrs</span>
-                                <span class="result-note">Adjusted for blockade</span>
+                                <span class="metric-value" id="sim-res-eta-land">0.0 hrs</span>
+                                <span class="result-note">Nearest strategic depot</span>
                             </div>
                             <div class="result">
                                 <span class="eyebrow">Air rescue ETA</span>
@@ -334,20 +329,250 @@
             </div>
         </div>
 
-        <!-- ==================== TAB 3: DEPOT STOCK & BURN RATES ==================== -->
+        <!-- ==================== TAB 3: HUB & WAREHOUSE INVENTORY MANAGEMENT ==================== -->
         <div id="section-tab-inventory" class="analytics-tab-content stack hidden">
-            <section class="card">
+            <!-- Hub Selection Sub-Tab Pills -->
+            <div class="hub-nav-pills" id="hub-nav-pills-bar">
+                <button type="button" class="hub-pill active" id="pill-hub-all" onclick="selectInventoryHub(null)">All Hubs Combined</button>
+                <button type="button" class="hub-pill" id="pill-hub-1" onclick="selectInventoryHub(1)">Yangon Central Logistics Base</button>
+                <button type="button" class="hub-pill" id="pill-hub-2" onclick="selectInventoryHub(2)">Naypyidaw Strategic Reserve</button>
+                <button type="button" class="hub-pill" id="pill-hub-3" onclick="selectInventoryHub(3)">Mandalay Regional Depot</button>
+            </div>
+
+            <!-- VIEW A: ALL HUBS COMBINED OVERVIEW -->
+            <div id="hub-overview-view">
+                <section class="card">
+                    <header class="card-head">
+                        <div>
+                            <h3>Regional Hubs &amp; Warehouse Inventory</h3>
+                            <p class="card-sub">Manage warehouse stock, log incoming shipments, issue supplies, and track days of supplies remaining.</p>
+                        </div>
+                        <div style="display:flex; gap:10px; align-items:center;">
+                            <span class="card-note" id="depots-online-badge">3 hubs online</span>
+                        </div>
+                    </header>
+                    <div class="card-body">
+                        <!-- Network Summary Bar (3 Core Items) -->
+                        <div class="inventory-summary-row" id="inventory-summary-bar" style="grid-template-columns: repeat(3, minmax(0, 1fr));">
+                            <div class="inv-sum-item">
+                                <span class="inv-sum-label">Water in stock</span>
+                                <span class="inv-sum-val" id="inv-sum-water">--</span>
+                            </div>
+                            <div class="inv-sum-item">
+                                <span class="inv-sum-label">Food in stock</span>
+                                <span class="inv-sum-val" id="inv-sum-food">--</span>
+                            </div>
+                            <div class="inv-sum-item">
+                                <span class="inv-sum-label">Medical kits</span>
+                                <span class="inv-sum-val" id="inv-sum-medical">--</span>
+                            </div>
+                        </div>
+
+                        <!-- Inter-Hub Network Rebalancing Advisor Card -->
+                        <div class="card" id="hub-rebalance-card" style="margin-top:20px; background:#f8fafc; border:1px solid #e2e8f0; border-left:4px solid #2563eb;">
+                            <div class="card-head" style="padding:14px 18px; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center;">
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <svg class="icon icon-sm" style="color:#2563eb;" aria-hidden="true"><use href="#i-refresh"/></svg>
+                                    <div>
+                                        <h4 style="margin:0; font-size:14px; font-weight:600; color:#0f172a;">Inter-Hub Supply Rebalancing Advisor</h4>
+                                        <p class="card-sub" style="margin:0; font-size:12px;">Network optimization for stock rebalancing between regional depots.</p>
+                                    </div>
+                                </div>
+                                <span class="tag tag-ok" id="rebalance-status-tag">Network Balanced</span>
+                            </div>
+                            <div class="card-body" id="hub-rebalance-body" style="padding:16px 18px;">
+                                <div id="hub-rebalance-content">
+                                    <div style="font-size:12px; color:#64748b;">Evaluating regional inventory equilibrium across all hubs...</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 3 Hub Cards Grid (Overview with "View Hub Details" buttons) -->
+                        <div class="depot-grid" id="depots-grid-container" style="margin-top:20px;">
+                            <div class="p-6 text-center text-slate-400 text-xs font-semibold col-span-3">
+                                Loading hub warehouse data...
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- VIEW B: DEDICATED INDIVIDUAL HUB VIEW (Hidden by default) -->
+            <div id="hub-individual-view" class="hidden">
+                <section class="card">
+                    <header class="card-head" style="align-items:center;">
+                        <div>
+                            <div style="display:flex; gap:8px; align-items:center;">
+                                <h3 id="indiv-hub-title" style="margin:0;">Mandalay Regional Depot</h3>
+                                <span class="tag" id="indiv-hub-status-badge">Operational</span>
+                            </div>
+                            <p class="card-sub" id="indiv-hub-subtitle">National Strategic Base &bull; Lat: 21.9588, Lon: 96.0891</p>
+                        </div>
+                        <!-- Dedicated Operational Actions Toolbar -->
+                        <div class="hub-header-actions">
+                            <button type="button" id="btn-indiv-receive" class="btn btn-sm btn-primary">Receive supplies</button>
+                            <button type="button" id="btn-indiv-send" class="btn btn-sm">Send supplies</button>
+                            <button type="button" id="btn-indiv-audit" class="btn btn-sm btn-quiet">Audit stock</button>
+                            <button type="button" onclick="selectInventoryHub(null)" class="btn btn-sm">All hubs overview</button>
+                        </div>
+                    </header>
+                    <div class="card-body">
+                        <!-- Individual Hub 3 Core Resource Stat Meters -->
+                        <div class="depot-meters" id="indiv-hub-meters-container" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:16px;">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Dedicated Individual Hub Analytics Charts -->
+                <div class="pair" id="indiv-hub-charts-pair">
+                    <section class="card">
+                        <header class="card-head">
+                            <div>
+                                <h3 id="indiv-chart-runway-title">Hub Stock Runway Projection</h3>
+                                <p class="card-sub" id="indiv-chart-runway-sub">7-day stock depletion forecast with safety reorder threshold.</p>
+                            </div>
+                            <div style="display:flex; gap:6px; align-items:center;">
+                                <select id="filter-indiv-runway-category" class="input" style="padding:2px 8px; font-size:12px; height:28px;" onchange="renderIndividualHubCharts()">
+                                    <option value="water">Water (Liters)</option>
+                                    <option value="food">Food (Packs)</option>
+                                    <option value="medical">Medical (Kits)</option>
+                                </select>
+                            </div>
+                        </header>
+                        <div class="card-body chart-box chart-box-tall">
+                            <canvas id="chart-indiv-hub-runway"></canvas>
+                        </div>
+                    </section>
+
+                    <section class="card">
+                        <header class="card-head">
+                            <div>
+                                <h3 id="indiv-chart-velocity-title">Hub Inflow vs Outflow</h3>
+                                <p class="card-sub" id="indiv-chart-velocity-sub">Weekly received vs dispatched volume for this depot.</p>
+                            </div>
+                            <div style="display:flex; gap:6px; align-items:center;">
+                                <select id="filter-indiv-velocity-category" class="input" style="padding:2px 8px; font-size:12px; height:28px;" onchange="renderIndividualHubCharts()">
+                                    <option value="water">Water (Liters)</option>
+                                    <option value="food">Food (Packs)</option>
+                                    <option value="medical">Medical (Kits)</option>
+                                </select>
+                            </div>
+                        </header>
+                        <div class="card-body chart-box chart-box-tall">
+                            <canvas id="chart-indiv-hub-velocity"></canvas>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Dedicated Individual Hub Transaction Ledger -->
+                <section class="card" id="indiv-hub-ledger-section">
+                    <header class="card-head">
+                        <div>
+                            <h3 id="indiv-ledger-title">Hub Transaction Ledger</h3>
+                            <p class="card-sub" id="indiv-ledger-sub">All receipts, dispatches, and audits for this depot only.</p>
+                        </div>
+                    </header>
+                    <div class="table-scroll">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Date &amp; Time</th>
+                                    <th>Action</th>
+                                    <th>Item</th>
+                                    <th class="num">Quantity</th>
+                                    <th class="num">Balance after</th>
+                                    <th>Source / Destination</th>
+                                    <th>Notes</th>
+                                </tr>
+                            </thead>
+                            <tbody id="indiv-hub-ledger-tbody">
+                                <tr>
+                                    <td colspan="7" style="text-align:center; padding:20px; color:#94a3b8;">Select a hub to view its ledger.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Inventory Analytics Charts (Dynamically adapts to Combined vs Individual) -->
+            <div class="pair" id="hub-combined-charts-pair">
+                <section class="card">
+                    <header class="card-head">
+                        <div>
+                            <h3 id="chart-runway-title">Stock runway projection</h3>
+                            <p class="card-sub" id="chart-runway-sub">7-day forecast of water, food, and medical stock levels based on daily usage.</p>
+                        </div>
+                        <div style="display:flex; gap:6px; align-items:center;">
+                            <select id="filter-runway-category" class="input" style="padding:2px 8px; font-size:12px; height:28px;" onchange="renderInventoryAnalyticsCharts()">
+                                <option value="water">Water (Liters)</option>
+                                <option value="food">Food (Packs)</option>
+                                <option value="medical">Medical (Kits)</option>
+                            </select>
+                        </div>
+                    </header>
+                    <div class="card-body chart-box chart-box-tall">
+                        <canvas id="chart-inventory-runway"></canvas>
+                    </div>
+                </section>
+
+                <section class="card">
+                    <header class="card-head">
+                        <div>
+                            <h3 id="chart-velocity-title">Supply inflow and outflow</h3>
+                            <p class="card-sub" id="chart-velocity-sub">Comparison of supplies received from donors versus supplies dispatched to field zones.</p>
+                        </div>
+                        <div style="display:flex; gap:6px; align-items:center;">
+                            <select id="filter-velocity-category" class="input" style="padding:2px 8px; font-size:12px; height:28px;" onchange="renderInventoryAnalyticsCharts()">
+                                <option value="water">Water (Liters)</option>
+                                <option value="food">Food (Packs)</option>
+                                <option value="medical">Medical (Kits)</option>
+                            </select>
+                        </div>
+                    </header>
+                    <div class="card-body chart-box chart-box-tall">
+                        <canvas id="chart-inventory-velocity"></canvas>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Recent Inventory Activity Ledger Table -->
+            <section class="card" id="hub-combined-ledger-section">
                 <header class="card-head">
                     <div>
-                        <h3>Regional Depots &amp; Stock Levels</h3>
-                        <p class="card-sub">Warehouse reserves, daily usage rates, and days of supplies remaining.</p>
+                        <h3 id="ledger-table-title">Recent inventory activity</h3>
+                        <p class="card-sub" id="ledger-table-sub">Log of all received, sent, and audited supplies across all hubs.</p>
                     </div>
-                    <span class="card-note" id="depots-online-badge">3 hubs online</span>
+                    <div style="display:flex; gap:8px;">
+                        <select id="filter-ledger-hub" class="input" style="padding:4px 10px; font-size:12px; height:32px;" onchange="loadInventoryTransactions()">
+                            <option value="">All hubs</option>
+                            <option value="1">Yangon Central</option>
+                            <option value="2">Naypyidaw Strategic</option>
+                            <option value="3">Mandalay Regional</option>
+                        </select>
+                    </div>
                 </header>
-                <div class="card-body depot-grid" id="depots-grid-container">
-                    <div class="p-6 text-center text-slate-400 text-xs font-semibold col-span-3">
-                        Loading depot warehouse capacities...
-                    </div>
+                <div class="table-scroll">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Date &amp; Time</th>
+                                <th>Hub</th>
+                                <th>Action</th>
+                                <th>Item</th>
+                                <th class="num">Quantity</th>
+                                <th class="num">Balance after</th>
+                                <th>Source / Destination</th>
+                                <th>Notes</th>
+                            </tr>
+                        </thead>
+                        <tbody id="inventory-transactions-tbody">
+                            <tr>
+                                <td colspan="8" style="text-align:center; padding:20px; color:#94a3b8;">Loading inventory ledger...</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </section>
         </div>
@@ -466,13 +691,159 @@
             </section>
         </div>
 
+    </div>
 
+    <!-- Inventory Operation Modal (Clean, No Emojis) -->
+    <div id="modal-inventory-op" class="modal-overlay hidden">
+        <div class="modal-card">
+            <div class="modal-head">
+                <div>
+                    <h3 id="modal-inv-title">Receive supplies</h3>
+                    <p class="modal-sub" id="modal-inv-subtitle">Log incoming delivery into warehouse storage</p>
+                </div>
+                <button type="button" class="btn-close" onclick="closeInventoryModal()">&times;</button>
+            </div>
+            <form id="form-inventory-op" onsubmit="handleInventorySubmit(event)">
+                <input type="hidden" id="inv-op-type" value="intake">
 
+                <div class="modal-body stack-sm">
+                    <!-- Action Type Selector -->
+                    <div class="field">
+                        <label class="field-label" for="inv-action-select">Operation type</label>
+                        <select id="inv-action-select" class="input" onchange="switchInventoryModalMode(this.value)">
+                            <option value="intake">Receive supplies (Inbound delivery)</option>
+                            <option value="issue">Send supplies (Outbound dispatch)</option>
+                            <option value="adjust">Audit stock (Physical recount / Damage write-off)</option>
+                        </select>
+                    </div>
 
+                    <!-- Target Hub -->
+                    <div class="field">
+                        <label class="field-label" for="inv-hub-select">Target warehouse hub</label>
+                        <select id="inv-hub-select" class="input" required>
+                            <option value="1">Yangon Central Logistics Base</option>
+                            <option value="2">Naypyidaw Strategic Reserve</option>
+                            <option value="3">Mandalay Regional Depot</option>
+                        </select>
+                    </div>
 
+                    <!-- Item Category & Quantity (3 Core Items Only) -->
+                    <div class="pair-inputs" style="display:flex; gap:10px;">
+                        <div class="field" style="flex:1;">
+                            <label class="field-label" for="inv-item-category">Supply item</label>
+                            <select id="inv-item-category" class="input" required>
+                                <option value="water">Clean drinking water (Liters)</option>
+                                <option value="food">Emergency food rations (Packs)</option>
+                                <option value="medical">Medical &amp; trauma kits (Units)</option>
+                            </select>
+                        </div>
+                        <div class="field" style="flex:1;">
+                            <label class="field-label" for="inv-quantity" id="lbl-inv-qty">Quantity</label>
+                            <input type="number" id="inv-quantity" class="input" min="1" step="1" placeholder="e.g. 10000" required>
+                        </div>
+                    </div>
+
+                    <!-- Source or Destination -->
+                    <div class="field">
+                        <label class="field-label" for="inv-source-dest" id="lbl-inv-source-dest">Supplier / Donor organization</label>
+                        <input type="text" id="inv-source-dest" class="input" placeholder="e.g. UN-WFP Aid Flight or Local Charity" required>
+                    </div>
+
+                    <!-- Notes / Reason -->
+                    <div class="field">
+                        <label class="field-label" for="inv-notes">Notes / Reason (optional)</label>
+                        <textarea id="inv-notes" class="input" rows="2" placeholder="Additional details about batch, condition, or mission..."></textarea>
+                    </div>
+                </div>
+
+                <div class="modal-foot">
+                    <button type="button" class="btn" onclick="closeInventoryModal()">Cancel</button>
+                    <button type="submit" id="btn-inv-submit" class="btn btn-primary">Confirm &amp; update inventory</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Disaster Dispatch Modal (Matches Live Map Dispatch) -->
+    <div id="modal-disaster-dispatch" class="modal-overlay hidden" onclick="if(event.target===this) closeDisasterDispatchModal()">
+        <div class="modal-card" style="max-width: 520px;">
+            <div class="modal-head">
+                <div>
+                    <h3 id="disp-modal-title">Dispatch relief supplies</h3>
+                    <p id="disp-modal-subtitle" class="modal-sub">Deploy supplies from this strategic warehouse to an active disaster zone</p>
+                </div>
+                <button type="button" class="btn-close" onclick="closeDisasterDispatchModal()">&times;</button>
+            </div>
+
+            <form id="form-disaster-dispatch" onsubmit="handleDisasterDispatchSubmit(event)">
+                <input type="hidden" id="disp-disaster-id">
+                <input type="hidden" id="disp-disaster-title">
+                <input type="hidden" id="disp-disaster-lat">
+                <input type="hidden" id="disp-disaster-lon">
+                <input type="hidden" id="disp-disaster-sev">
+                <input type="hidden" id="disp-hub-id" value="1">
+
+                <div class="modal-body stack-sm">
+                    <!-- Source Warehouse Card -->
+                    <div style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; padding:12px 14px;">
+                        <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:#0369a1; margin-bottom:4px;">Source Warehouse Logistics Base</div>
+                        <div id="disp-assigned-hub-name" style="font-size:14px; font-weight:700; color:#0c4a6e; margin-bottom:4px;">--</div>
+                        <div id="disp-assigned-hub-stock" style="font-size:11.5px; color:#0369a1;">Available stock: Loading...</div>
+                    </div>
+
+                    <!-- Target Disaster Selector -->
+                    <div class="field">
+                        <label class="field-label" for="disp-target-select">Target disaster zone / Mission</label>
+                        <select id="disp-target-select" class="input" required onchange="onAnalyticsDisasterSelectChange(this.value)">
+                            <option value="">Loading active emergencies...</option>
+                        </select>
+                    </div>
+
+                    <!-- Disaster Needs Summary Card -->
+                    <div id="disp-target-summary-card" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px 12px;">
+                        <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:#64748b; margin-bottom:4px;">Mission Demand Estimate</div>
+                        <div id="disp-target-meta" style="font-size:12px; color:#475569; display:flex; justify-content:space-between;">
+                            <span>Severity: <strong id="disp-target-sev">--</strong></span>
+                            <span>Water needed: <strong id="disp-target-water">--</strong></span>
+                            <span>Food needed: <strong id="disp-target-food">--</strong></span>
+                        </div>
+                    </div>
+
+                    <!-- Quantities (3 Core items) -->
+                    <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:10px;">
+                        <div class="field">
+                            <label class="field-label" for="disp-qty-water">Water (L)</label>
+                            <input type="number" id="disp-qty-water" class="input" min="0" step="1000" placeholder="0" required>
+                            <span id="disp-hint-water" style="font-size:10px; color:#64748b; display:block; margin-top:2px;">Max stock: --</span>
+                        </div>
+                        <div class="field">
+                            <label class="field-label" for="disp-qty-food">Food (packs)</label>
+                            <input type="number" id="disp-qty-food" class="input" min="0" step="100" placeholder="0" required>
+                            <span id="disp-hint-food" style="font-size:10px; color:#64748b; display:block; margin-top:2px;">Max stock: --</span>
+                        </div>
+                        <div class="field">
+                            <label class="field-label" for="disp-qty-medical">Medical (kits)</label>
+                            <input type="number" id="disp-qty-medical" class="input" min="0" step="10" placeholder="0" required>
+                            <span id="disp-hint-medical" style="font-size:10px; color:#64748b; display:block; margin-top:2px;">Max stock: --</span>
+                        </div>
+                    </div>
+
+                    <!-- Notes -->
+                    <div class="field">
+                        <label class="field-label" for="disp-notes">Mission instructions / Route notes (optional)</label>
+                        <textarea id="disp-notes" class="input" rows="2" placeholder="e.g. Direct relief convoy dispatch via regional transit corridor..."></textarea>
+                    </div>
+                </div>
+
+                <div class="modal-foot">
+                    <button type="button" class="btn" onclick="closeDisasterDispatchModal()">Cancel</button>
+                    <button type="submit" id="btn-disp-submit" class="btn btn-primary">Confirm &amp; dispatch supplies</button>
+                </div>
+            </form>
+        </div>
     </div>
 
     <!-- Analytics Logic -->
-    <script src="analytics.js?v=20260818-clean-v8"></script>
+    <script src="analytics.js?v=20260819-clean-v15"></script>
 </body>
 </html>

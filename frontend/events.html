@@ -165,6 +165,8 @@
         let rawEventsData = [];
         let activeContinent = 'All';
         let searchQuery = '';
+        let isLoadingEvents = true;
+        let loadEventsError = null;
 
         /** Shortens a figure for a summary tile. */
         function compactFigure(n) {
@@ -301,7 +303,7 @@
         }
 
         async function apiFetch(path, options = {}) {
-            const timeoutMs = options.timeout || 3500;
+            const timeoutMs = options.timeout || 8000;
             const fetchOptions = { ...options };
             delete fetchOptions.timeout;
 
@@ -340,82 +342,11 @@
 
         function getContinent(lat, lon, title = '') {
             const t = (title || '').toLowerCase();
-            if (t.includes('myanmar') || t.includes('japan') || t.includes('china') || t.includes('india') ||
-                t.includes('philippines') || t.includes('indonesia') || t.includes('thailand') || t.includes('vietnam') ||
-                t.includes('bago') || t.includes('yangon') || t.includes('asia') || t.includes('korea') || t.includes('taiwan')) {
-                return 'Asia';
-            }
-            if (t.includes('turkey') || t.includes('greece') || t.includes('italy') || t.includes('spain') ||
-                t.includes('france') || t.includes('germany') || t.includes('uk') || t.includes('europe') || t.includes('iceland')) {
-                return 'Europe';
-            }
-            if (t.includes('usa') || t.includes('mexico') || t.includes('brazil') || t.includes('chile') ||
-                t.includes('california') || t.includes('florida') || t.includes('canada') || t.includes('peru') || t.includes('america')) {
-                return 'Americas';
-            }
-            if (t.includes('egypt') || t.includes('madagascar') || t.includes('south africa') || t.includes('kenya') || t.includes('africa')) {
-                return 'Africa';
-            }
-            if (t.includes('australia') || t.includes('zealand') || t.includes('fiji') || t.includes('oceania')) {
-                return 'Oceania';
-            }
-            if (lat >= 5 && lat <= 55 && lon >= 60 && lon <= 150) return 'Asia';
-            if (lat >= 35 && lat <= 70 && lon >= -25 && lon <= 45) return 'Europe';
-            if (lat >= -55 && lat <= 70 && lon >= -170 && lon <= -30) return 'Americas';
-            if (lat >= -35 && lat <= 37 && lon >= -20 && lon <= 52) return 'Africa';
-            if (lat >= -50 && lat <= 0 && lon >= 110 && lon <= 180) return 'Oceania';
-            return 'Asia';
-        }
-
-        function formatOccurredTime(dateStr) {
-            if (!dateStr) return 'Just now';
-            try {
-                const date = new Date(dateStr);
-                if (isNaN(date.getTime())) return dateStr;
-                return date.toLocaleString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                });
-            } catch (e) {
-                return dateStr;
-            }
-        }
-
-        async function loadEventsData() {
-            try {
-                const res = await apiFetch('/api/dashboard-data');
-                if (res && res.ok) {
-                    const data = await res.json();
-                    rawEventsData = data.dashboard_data || data.data || [];
-                }
-            } catch (e) {
-                console.error('Failed to load events:', e);
-            }
-
-            renderEventsTable();
-        }
-
-        function filterEventsByContinent(cont) {
-            activeContinent = cont;
-            ['all', 'asia', 'europe', 'americas', 'africa', 'oceania'].forEach(c => {
-                const el = document.getElementById(`chip-${c}`);
-                if (el) el.classList.toggle('active', (c === cont.toLowerCase()) || (c === 'all' && cont === 'All'));
-            });
-            renderEventsTable();
-        }
-
-        function filterEventsTable() {
-            searchQuery = document.getElementById('table-search').value.toLowerCase().trim();
-            renderEventsTable();
-        }
-
-        function getContinent(lat, lon, title = '') {
-            const t = (title || '').toLowerCase();
             if (t.includes('myanmar') || t.includes('burma') || t.includes('yangon') || t.includes('mandalay') || t.includes('naypyidaw') ||
                 t.includes('bago') || t.includes('sagaing') || t.includes('shan') || t.includes('kachin') || t.includes('rakhine') ||
-                t.includes('inle') || t.includes('hpakant') || t.includes('sittwe') || t.includes('kalay') || t.includes('myitkyina') || t.includes('taungoo')) {
+                t.includes('inle') || t.includes('hpakant') || t.includes('sittwe') || t.includes('kalay') || t.includes('myitkyina') || t.includes('taungoo') ||
+                t.includes('japan') || t.includes('china') || t.includes('india') || t.includes('philippines') || t.includes('indonesia') ||
+                t.includes('thailand') || t.includes('vietnam') || t.includes('asia') || t.includes('korea') || t.includes('taiwan')) {
                 return 'Asia';
             }
             if (t.includes('turkey') || t.includes('greece') || t.includes('italy') || t.includes('spain') ||
@@ -440,6 +371,67 @@
             if (lat >= -35.0 && lat <= 37.0 && lon >= -20.0 && lon <= 52.0) return 'Africa';
             if (lat >= -50.0 && lat <= 0.0 && lon >= 110.0 && lon <= 180.0) return 'Oceania';
             return 'Asia';
+        }
+
+        function formatOccurredTime(dateStr) {
+            if (!dateStr) return 'Just now';
+            try {
+                const date = new Date(dateStr);
+                if (isNaN(date.getTime())) return dateStr;
+                return date.toLocaleString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            } catch (e) {
+                return dateStr;
+            }
+        }
+
+        async function loadEventsData() {
+            isLoadingEvents = true;
+            loadEventsError = null;
+            renderEventsTable();
+
+            try {
+                const res = await apiFetch('/api/dashboard-data', { timeout: 12000 });
+                if (res && res.ok) {
+                    const data = await res.json();
+                    rawEventsData = data.dashboard_data || data.data || [];
+                    isLoadingEvents = false;
+                } else {
+                    // Fallback to /api/live-alerts if dashboard-data is unavailable
+                    const fallbackRes = await apiFetch('/api/live-alerts', { timeout: 6000 });
+                    if (fallbackRes && fallbackRes.ok) {
+                        const fallbackData = await fallbackRes.json();
+                        rawEventsData = fallbackData.alerts || fallbackData.data || [];
+                        isLoadingEvents = false;
+                    } else {
+                        throw new Error('API server did not respond');
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to load events:', e);
+                isLoadingEvents = false;
+                loadEventsError = e.message || 'Connection timeout';
+            }
+
+            renderEventsTable();
+        }
+
+        function filterEventsByContinent(cont) {
+            activeContinent = cont;
+            ['all', 'asia', 'europe', 'americas', 'africa', 'oceania'].forEach(c => {
+                const el = document.getElementById(`chip-${c}`);
+                if (el) el.classList.toggle('active', (c === cont.toLowerCase()) || (c === 'all' && cont === 'All'));
+            });
+            renderEventsTable();
+        }
+
+        function filterEventsTable() {
+            searchQuery = document.getElementById('table-search').value.toLowerCase().trim();
+            renderEventsTable();
         }
 
         function isWaterwayAccessible(lat, lon, title = '') {
@@ -626,9 +618,14 @@
             });
 
             if (!filtered.length) {
-                const msg = rawEventsData.length
-                    ? 'No events match this filter.'
-                    : 'Synchronising live GDACS emergency events…';
+                let msg = 'No events match this filter.';
+                if (isLoadingEvents) {
+                    msg = 'Synchronising live GDACS emergency events…';
+                } else if (loadEventsError && rawEventsData.length === 0) {
+                    msg = `Unable to connect to live events feed (${loadEventsError}). Click Refresh Data to retry.`;
+                } else if (rawEventsData.length === 0) {
+                    msg = 'No active disaster alerts found.';
+                }
                 tbody.innerHTML = `<tr><td colspan="9" class="table-empty">${msg}</td></tr>`;
                 return;
             }
